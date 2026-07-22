@@ -574,7 +574,7 @@ if choice == "Create Document":
             st.components.v1.html(html_preview, height=650, scrolling=True)
 
         with save_tab:
-            doc_status = st.selectbox("Initial Status", ["Paid", "Pending", "Sent", "Draft"])
+            doc_status = "Pending"
 
             if st.button("💾 Generate & Save Document"):
                 items_json = json.dumps(st.session_state.item_list)
