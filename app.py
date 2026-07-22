@@ -479,11 +479,10 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
     """
     return html_content
 
-# --- STREAMLIT APP NAVIGATION ---
+# --- STREAMLIT APP NAVIGATION (USING RADIO BUTTONS INSTEAD OF SIDEBAR SELECTBOX) ---
 st.title("🧾 Nexus Billing & Operations Suite")
 
-menu = ["Create Document", "Document History & Management", "Client Directory", "Recycle Bin"]
-choice = st.sidebar.selectbox("Navigation", menu)
+choice = st.radio("Navigation Menu", ["Create Document", "Document History & Management", "Client Directory", "Recycle Bin"], horizontal=True)
 
 st.sidebar.divider()
 st.sidebar.subheader("🖼️ Invoice Branding")
@@ -555,7 +554,6 @@ if choice == "Create Document":
     if st.session_state.item_list:
         st.write("### Current Items in Document")
         
-        # Display editable/deletable item breakdown with line subtotal
         for idx, item in enumerate(st.session_state.item_list):
             line_sub = item['qty'] * item['rate']
             cols = st.columns([4, 1])
@@ -685,7 +683,7 @@ elif choice == "Document History & Management":
                     st.rerun()
 
             with tab_delete:
-                st.warning("Moving this document to the Recycle Bin will remove it from active records. You can restore it anytime from the sidebar Recycle Bin.")
+                st.warning("Moving this document to the Recycle Bin will remove it from active records. You can restore it anytime from the Recycle Bin view.")
                 if st.button("🗑️ Move Document to Recycle Bin", type="primary"):
                     cursor.execute('''
                         INSERT INTO deleted_documents (original_id, doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, subtotal, tax_amt, grand_total, status, items_json, deleted_at)
@@ -695,7 +693,6 @@ elif choice == "Document History & Management":
                     cursor.execute("DELETE FROM documents WHERE id = ?", (int(selected_id),))
                     conn.commit()
                     st.success("Document moved to Recycle Bin!")
-                    st.rerinfo("Document moved to Recycle Bin!")
                     st.rerun()
     else:
         st.info("No documents generated yet.")
