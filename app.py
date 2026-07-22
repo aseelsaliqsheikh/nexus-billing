@@ -73,6 +73,18 @@ try:
 except sqlite3.OperationalError:
     pass
 
+try:
+    cursor.execute("ALTER TABLE deleted_documents ADD COLUMN bin_id INTEGER PRIMARY KEY AUTOINCREMENT")
+    conn.commit()
+except sqlite3.OperationalError:
+    pass
+
+try:
+    cursor.execute("ALTER TABLE deleted_documents ADD COLUMN original_id INTEGER")
+    conn.commit()
+except sqlite3.OperationalError:
+    pass
+
 # --- COMPANY DETAILS ---
 COMPANY_NAME = "NEXUS CENTER OF EVENTS"
 COMPANY_SUB = "Event Planning, Execution & Corporate Management"
