@@ -523,7 +523,7 @@ if choice == "Create Document":
         st.session_state.item_list = []
 
     with st.form("add_item_form", clear_on_submit=True):
-        st.write("Add line items one by one below:")
+        st.write("Add multiple line items one by one below:")
         f_col1, f_col2, f_col3, f_col4 = st.columns([3, 1, 1, 1])
         with f_col1:
             item_desc = st.text_input("Item Description / Service Name")
@@ -546,9 +546,17 @@ if choice == "Create Document":
 
     if st.session_state.item_list:
         st.write("### Current Items in Document")
-        items_df = pd.DataFrame(st.session_state.item_list)
-        st.dataframe(items_df, use_container_width=True)
         
+        # Display editable/deletable item breakdown
+        for idx, item in enumerate(st.session_state.item_list):
+            cols = st.columns([4, 1])
+            with cols[0]:
+                st.write(f"**{idx+1}. {item['desc']}** | Qty: {item['qty']} | Rate: ₹{item['rate']:,.2f} | Tax: {item['tax_rate']}%")
+            with cols[1]:
+                if st.button("🗑️ Remove", key=f"remove_item_{idx}"):
+                    st.session_state.item_list.pop(idx)
+                    st.rerun()
+
         if st.button("Clear All Items"):
             st.session_state.item_list = []
             st.rerun()
