@@ -221,16 +221,18 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
         table_data = [[
             Paragraph("#", table_hdr), Paragraph("Item / Service Description", table_hdr),
             Paragraph("Qty", table_hdr), Paragraph("Rate (Rs.)", table_hdr),
+            Paragraph("Amount (Rs.)", table_hdr),
             Paragraph("CGST", table_hdr), Paragraph("SGST", table_hdr), Paragraph("Total (Rs.)", table_hdr)
         ]]
-        col_w = [25, 205, 35, 75, 50, 50, 100]
+        col_w = [25, 175, 35, 65, 75, 45, 45, 80]
     else:
         table_data = [[
             Paragraph("#", table_hdr), Paragraph("Item / Service Description", table_hdr),
             Paragraph("Qty", table_hdr), Paragraph("Rate (Rs.)", table_hdr),
+            Paragraph("Amount (Rs.)", table_hdr),
             Paragraph("IGST", table_hdr), Paragraph("Total (Rs.)", table_hdr)
         ]]
-        col_w = [25, 235, 40, 80, 60, 100]
+        col_w = [25, 205, 40, 75, 85, 55, 95]
 
     for idx, item in enumerate(items, start=1):
         line_sub = item['qty'] * item['rate']
@@ -242,6 +244,7 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
             table_data.append([
                 Paragraph(str(idx), table_cell), Paragraph(item['desc'], table_cell),
                 Paragraph(str(item['qty']), table_cell_r), Paragraph(f"Rs. {item['rate']:,.2f}", table_cell_r),
+                Paragraph(f"Rs. {line_sub:,.2f}", table_cell_r),
                 Paragraph(f"{half_tax_pct:.1f}%", table_cell_r), Paragraph(f"{half_tax_pct:.1f}%", table_cell_r),
                 Paragraph(f"Rs. {line_total:,.2f}", table_cell_r)
             ])
@@ -249,6 +252,7 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
             table_data.append([
                 Paragraph(str(idx), table_cell), Paragraph(item['desc'], table_cell),
                 Paragraph(str(item['qty']), table_cell_r), Paragraph(f"Rs. {item['rate']:,.2f}", table_cell_r),
+                Paragraph(f"Rs. {line_sub:,.2f}", table_cell_r),
                 Paragraph(f"{item['tax_rate']}%", table_cell_r), Paragraph(f"Rs. {line_total:,.2f}", table_cell_r)
             ])
 
@@ -338,6 +342,7 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
                     <td style="padding: 8px; border-bottom: 1px solid #CBD5E1;">{item['desc']}</td>
                     <td style="padding: 8px; border-bottom: 1px solid #CBD5E1; text-align: right;">{item['qty']}</td>
                     <td style="padding: 8px; border-bottom: 1px solid #CBD5E1; text-align: right;">Rs. {item['rate']:,.2f}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid #CBD5E1; text-align: right;">Rs. {line_sub:,.2f}</td>
                     <td style="padding: 8px; border-bottom: 1px solid #CBD5E1; text-align: right;">{half_tax:.1f}%</td>
                     <td style="padding: 8px; border-bottom: 1px solid #CBD5E1; text-align: right;">{half_tax:.1f}%</td>
                     <td style="padding: 8px; border-bottom: 1px solid #CBD5E1; text-align: right;">Rs. {line_total:,.2f}</td>
@@ -350,6 +355,7 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
                     <td style="padding: 8px; border-bottom: 1px solid #CBD5E1;">{item['desc']}</td>
                     <td style="padding: 8px; border-bottom: 1px solid #CBD5E1; text-align: right;">{item['qty']}</td>
                     <td style="padding: 8px; border-bottom: 1px solid #CBD5E1; text-align: right;">Rs. {item['rate']:,.2f}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid #CBD5E1; text-align: right;">Rs. {line_sub:,.2f}</td>
                     <td style="padding: 8px; border-bottom: 1px solid #CBD5E1; text-align: right;">{item['tax_rate']}%</td>
                     <td style="padding: 8px; border-bottom: 1px solid #CBD5E1; text-align: right;">Rs. {line_total:,.2f}</td>
                 </tr>
@@ -377,6 +383,7 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
         <th style="padding: 8px; background-color: #0F172A; color: white; text-align: left;">Item / Service Description</th>
         <th style="padding: 8px; background-color: #0F172A; color: white; text-align: right;">Qty</th>
         <th style="padding: 8px; background-color: #0F172A; color: white; text-align: right;">Rate (Rs.)</th>
+        <th style="padding: 8px; background-color: #0F172A; color: white; text-align: right;">Amount (Rs.)</th>
         <th style="padding: 8px; background-color: #0F172A; color: white; text-align: right;">CGST</th>
         <th style="padding: 8px; background-color: #0F172A; color: white; text-align: right;">SGST</th>
         <th style="padding: 8px; background-color: #0F172A; color: white; text-align: right;">Total (Rs.)</th>
@@ -385,6 +392,7 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
         <th style="padding: 8px; background-color: #0F172A; color: white; text-align: left;">Item / Service Description</th>
         <th style="padding: 8px; background-color: #0F172A; color: white; text-align: right;">Qty</th>
         <th style="padding: 8px; background-color: #0F172A; color: white; text-align: right;">Rate (Rs.)</th>
+        <th style="padding: 8px; background-color: #0F172A; color: white; text-align: right;">Amount (Rs.)</th>
         <th style="padding: 8px; background-color: #0F172A; color: white; text-align: right;">IGST</th>
         <th style="padding: 8px; background-color: #0F172A; color: white; text-align: right;">Total (Rs.)</th>
     """
@@ -547,11 +555,12 @@ if choice == "Create Document":
     if st.session_state.item_list:
         st.write("### Current Items in Document")
         
-        # Display editable/deletable item breakdown
+        # Display editable/deletable item breakdown with line subtotal
         for idx, item in enumerate(st.session_state.item_list):
+            line_sub = item['qty'] * item['rate']
             cols = st.columns([4, 1])
             with cols[0]:
-                st.write(f"**{idx+1}. {item['desc']}** | Qty: {item['qty']} | Rate: ₹{item['rate']:,.2f} | Tax: {item['tax_rate']}%")
+                st.write(f"**{idx+1}. {item['desc']}** | Qty: {item['qty']} × ₹{item['rate']:,.2f} = **₹{line_sub:,.2f}** | Tax: {item['tax_rate']}%")
             with cols[1]:
                 if st.button("🗑️ Remove", key=f"remove_item_{idx}"):
                     st.session_state.item_list.pop(idx)
@@ -686,6 +695,7 @@ elif choice == "Document History & Management":
                     cursor.execute("DELETE FROM documents WHERE id = ?", (int(selected_id),))
                     conn.commit()
                     st.success("Document moved to Recycle Bin!")
+                    st.rerinfo("Document moved to Recycle Bin!")
                     st.rerun()
     else:
         st.info("No documents generated yet.")
