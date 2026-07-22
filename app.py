@@ -727,6 +727,19 @@ elif choice == "Client Directory":
     st.subheader("Existing Clients Register")
     if not clients_df.empty:
         st.dataframe(clients_df, use_container_width=True)
+        
+        st.markdown("### 🗑️ Delete Unwanted Client")
+        with st.form("delete_client_form"):
+            client_options = {row['name']: row['id'] for _, row in clients_df.iterrows()}
+            selected_client_to_delete = st.selectbox("Select Client to Delete", options=list(client_options.keys()))
+            delete_client_btn = st.form_submit_button("❌ Delete Selected Client", type="primary")
+            
+            if delete_client_btn and selected_client_to_delete:
+                client_id_to_del = client_options[selected_client_to_delete]
+                cursor.execute("DELETE FROM clients WHERE id = ?", (client_id_to_del,))
+                conn.commit()
+                st.success(f"Client '{selected_client_to_delete}' has been deleted successfully!")
+                st.rerun()
     else:
         st.info("No clients registered yet.")
 
