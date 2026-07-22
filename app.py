@@ -470,7 +470,7 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
 # --- STREAMLIT APP NAVIGATION ---
 st.title("🧾 Nexus Billing & Operations Suite")
 
-menu = ["Create Document", "Document History & Management", "Client Directory"]
+menu = ["Create Document", "Document History & Management", "Client Directory", "Recycle Bin"]
 choice = st.sidebar.selectbox("Navigation", menu)
 
 st.sidebar.divider()
@@ -626,8 +626,8 @@ elif choice == "Document History & Management":
             except:
                 items_list = []
 
-            tab_view, tab_print, tab_status, tab_delete, tab_bin = st.tabs([
-                "👁️ View Actual Layout", "🖨️ Print Copies", "🔄 Update Status", "🗑️ Move to Recycle Bin", "♻️ Recycle Bin"
+            tab_view, tab_print, tab_status, tab_delete = st.tabs([
+                "👁️ View Actual Layout", "🖨️ Print Copies", "🔄 Update Status", "🗑️ Move to Recycle Bin"
             ])
 
             with tab_view:
@@ -665,7 +665,7 @@ elif choice == "Document History & Management":
                     st.rerun()
 
             with tab_delete:
-                st.warning("Moving this document to the Recycle Bin will remove it from active records. You can restore it anytime.")
+                st.warning("Moving this document to the Recycle Bin will remove it from active records. You can restore it anytime from the sidebar Recycle Bin.")
                 if st.button("🗑️ Move Document to Recycle Bin", type="primary"):
                     cursor.execute('''
                         INSERT INTO deleted_documents (original_id, doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, subtotal, tax_amt, grand_total, status, items_json, deleted_at)
@@ -676,35 +676,6 @@ elif choice == "Document History & Management":
                     conn.commit()
                     st.success("Document moved to Recycle Bin!")
                     st.rerun()
-
-            with tab_bin:
-                st.subheader("♻️ Recycle Bin — Deleted Documents")
-                bin_df = pd.read_sql_query("SELECT bin_id, original_id, doc_type, doc_num, client_name, grand_total, deleted_at FROM deleted_documents ORDER BY bin_id DESC", conn)
-                if not bin_df.empty:
-                    st.dataframe(bin_df, use_container_width=True)
-                    restore_bin_id = st.number_input("Enter Bin ID to Restore or Delete Permanently", min_value=int(bin_df['bin_id'].min()), max_value=int(bin_df['bin_id'].max()), step=1, key="restore_id_input")
-                    
-                    col_r1, col_r2 = st.columns(2)
-                    with col_r1:
-                        if st.button("♻️ Restore Document"):
-                            bin_row = cursor.execute("SELECT * FROM deleted_documents WHERE bin_id = ?", (int(restore_bin_id),)).fetchone()
-                            if bin_row:
-                                cursor.execute('''
-                                    INSERT OR REPLACE INTO documents (id, doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, subtotal, tax_amt, grand_total, status, items_json)
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                                ''', (bin_row[1], bin_row[2], bin_row[3], bin_row[4], bin_row[5], bin_row[6], bin_row[7], bin_row[8], bin_row[9], bin_row[10], bin_row[11], bin_row[12], bin_row[13]))
-                                cursor.execute("DELETE FROM deleted_documents WHERE bin_id = ?", (int(restore_bin_id),))
-                                conn.commit()
-                                st.success("Document successfully restored!")
-                                st.rerun()
-                    with col_r2:
-                        if st.button("❌ Delete Permanently", type="primary"):
-                            cursor.execute("DELETE FROM deleted_documents WHERE bin_id = ?", (int(restore_bin_id),))
-                            conn.commit()
-                            st.warning("Document permanently deleted.")
-                            st.rerun()
-                else:
-                    st.info("Recycle bin is currently empty.")
     else:
         st.info("No documents generated yet.")
 
@@ -740,3 +711,38 @@ elif choice == "Client Directory":
         st.dataframe(clients_df, use_container_width=True)
     else:
         st.info("No clients registered yet.")
+
+# --- 4. RECYCLE BIN ---
+elif choice == "Recycle Bin":
+    st.header("♻️ Recycle Bin — Deleted Documents")
+    
+    bin_df = pd.read_sql_query("SELECT bin_id, original_id, doc_type, doc_num, client_name, grand_total, deleted_at FROM deleted_documents ORDER BY bin_id DESC", conn)
+    
+    if not bin_df.empty:
+        st.dataframe(bin_df, use_container_width=True)
+        
+        st.divider()
+        st.subheader("🛠️ Manage Recycle Bin Item")
+        restore_bin_id = st.number_input("Enter Bin ID to Restore or Delete Permanently", min_value=int(bin_df['bin_id'].min()), max_value=int(bin_df['bin_id'].max()), step=1, key="restore_id_input")
+        
+        col_r1, col_r2 = st.columns(2)
+        with col_r1:
+            if st.button("♻️ Restore Document"):
+                bin_row = cursor.execute("SELECT * FROM deleted_documents WHERE bin_id = ?", (int(restore_bin_id),)).fetchone()
+                if bin_row:
+                    cursor.execute('''
+                        INSERT OR REPLACE INTO documents (id, doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, subtotal, tax_amt, grand_total, status, items_json)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (bin_row[1], bin_row[2], bin_row[3], bin_row[4], bin_row[5], bin_row[6], bin_row[7], bin_row[8], bin_row[9], bin_row[10], bin_row[11], bin_row[12], bin_row[13]))
+                    cursor.execute("DELETE FROM deleted_documents WHERE bin_id = ?", (int(restore_bin_id),))
+                    conn.commit()
+                    st.success("Document successfully restored!")
+                    st.rerun()
+        with col_r2:
+            if st.button("❌ Delete Permanently", type="primary"):
+                cursor.execute("DELETE FROM deleted_documents WHERE bin_id = ?", (int(restore_bin_id),))
+                conn.commit()
+                st.warning("Document permanently deleted.")
+                st.rerun()
+    else:
+        st.info("Recycle bin is currently empty.")
