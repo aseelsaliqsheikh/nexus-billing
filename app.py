@@ -563,44 +563,42 @@ if choice == "Create Document":
 
         st.divider()
         st.subheader("👁️ Live Layout Preview")
-        preview_tab, save_tab = st.tabs(["📄 View Actual Layout", "💾 Save Document"])
+        html_preview = render_html_preview(
+            doc_type, doc_num, client_name if client_name else "Client Name Placeholder", 
+            client_phone, client_gstin, client_state, str(doc_date), 
+            st.session_state.item_list, subtotal, tax_amt, grand_total
+        )
+        st.components.v1.html(html_preview, height=650, scrolling=True)
 
-        with preview_tab:
-            html_preview = render_html_preview(
-                doc_type, doc_num, client_name if client_name else "Client Name Placeholder", 
-                client_phone, client_gstin, client_state, str(doc_date), 
-                st.session_state.item_list, subtotal, tax_amt, grand_total
-            )
-            st.components.v1.html(html_preview, height=650, scrolling=True)
+        st.divider()
+        st.subheader("💾 Save Document")
+        doc_status = "Pending"
 
-        with save_tab:
-            doc_status = "Pending"
+        if st.button("💾 Generate & Save Document", type="primary"):
+            items_json = json.dumps(st.session_state.item_list)
+            cursor.execute('''
+                INSERT INTO documents (doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, subtotal, tax_amt, grand_total, status, items_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (doc_type, doc_num, client_name, client_phone, client_gstin, client_state, str(doc_date), subtotal, tax_amt, grand_total, doc_status, items_json))
+            conn.commit()
 
-            if st.button("💾 Generate & Save Document"):
-                items_json = json.dumps(st.session_state.item_list)
-                cursor.execute('''
-                    INSERT INTO documents (doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, subtotal, tax_amt, grand_total, status, items_json)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (doc_type, doc_num, client_name, client_phone, client_gstin, client_state, str(doc_date), subtotal, tax_amt, grand_total, doc_status, items_json))
+            if client_mode == "New Client (Quick Add)" and client_name:
+                cursor.execute("INSERT INTO clients (name, phone, state, tax_id) VALUES (?, ?, ?, ?)", (client_name, client_phone, client_state, client_gstin))
                 conn.commit()
 
-                if client_mode == "New Client (Quick Add)" and client_name:
-                    cursor.execute("INSERT INTO clients (name, phone, state, tax_id) VALUES (?, ?, ?, ?)", (client_name, client_phone, client_state, client_gstin))
-                    conn.commit()
+            st.session_state.item_list = []
+            st.success(f"{doc_type} '{doc_num}' created successfully!")
 
-                st.session_state.item_list = []
-                st.success(f"{doc_type} '{doc_num}' created successfully!")
-
-                pdf_data = generate_pdf(
-                    doc_type, doc_num, client_name, client_phone, client_gstin, client_state, 
-                    str(doc_date), json.loads(items_json), subtotal, tax_amt, grand_total
-                )
-                st.download_button(
-                    label=f"📄 Download {doc_type} PDF",
-                    data=pdf_data,
-                    file_name=f"{doc_num}.pdf",
-                    mime="application/pdf"
-                )
+            pdf_data = generate_pdf(
+                doc_type, doc_num, client_name, client_phone, client_gstin, client_state, 
+                str(doc_date), json.loads(items_json), subtotal, tax_amt, grand_total
+            )
+            st.download_button(
+                label=f"📄 Download {doc_type} PDF",
+                data=pdf_data,
+                file_name=f"{doc_num}.pdf",
+                mime="application/pdf"
+            )
 
 # --- 2. DOCUMENT HISTORY & MANAGEMENT ---
 elif choice == "Document History & Management":
