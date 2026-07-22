@@ -716,7 +716,22 @@ elif choice == "Client Directory":
 elif choice == "Recycle Bin":
     st.header("♻️ Recycle Bin — Deleted Documents")
     
-    bin_df = pd.read_sql_query("SELECT bin_id, original_id, doc_type, doc_num, client_name, grand_total, deleted_at FROM deleted_documents ORDER BY bin_id DESC", conn)
+    # Robust check/fix for table columns if they didn't populate properly
+    try:
+        bin_df = pd.read_sql_query("SELECT bin_id, original_id, doc_type, doc_num, client_name, grand_total, deleted_at FROM deleted_documents ORDER BY bin_id DESC", conn)
+    except sqlite3.OperationalError:
+        cursor.execute("DROP TABLE IF EXISTS deleted_documents")
+        cursor.execute('''
+            CREATE TABLE deleted_documents (
+                bin_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                original_id INTEGER,
+                doc_type TEXT, doc_num TEXT, client_name TEXT, client_phone TEXT, client_gstin TEXT, client_state TEXT,
+                doc_date TEXT, subtotal REAL, tax_amt REAL, grand_total REAL,
+                status TEXT, items_json TEXT, deleted_at TEXT
+            )
+        ''')
+        conn.commit()
+        bin_df = pd.read_sql_query("SELECT bin_id, original_id, doc_type, doc_num, client_name, grand_total, deleted_at FROM deleted_documents ORDER BY bin_id DESC", conn)
     
     if not bin_df.empty:
         st.dataframe(bin_df, use_container_width=True)
