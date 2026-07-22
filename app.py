@@ -33,7 +33,8 @@ cursor.execute('''
 ''')
 cursor.execute('''
     CREATE TABLE IF NOT EXISTS deleted_documents (
-        id INTEGER PRIMARY KEY,
+        bin_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        original_id INTEGER,
         doc_type TEXT, doc_num TEXT, client_name TEXT, client_phone TEXT, client_gstin TEXT, client_state TEXT,
         doc_date TEXT, subtotal REAL, tax_amt REAL, grand_total REAL,
         status TEXT, items_json TEXT, deleted_at TEXT
@@ -654,11 +655,10 @@ elif choice == "Document History & Management":
             with tab_delete:
                 st.warning("Moving this document to the Recycle Bin will remove it from active records. You can restore it anytime.")
                 if st.button("🗑️ Move Document to Recycle Bin", type="primary"):
-                    # Using INSERT OR REPLACE to prevent SQLite IntegrityError if ID already exists in bin
                     cursor.execute('''
-                        INSERT OR REPLACE INTO deleted_documents (id, doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, subtotal, tax_amt, grand_total, status, items_json, deleted_at)
+                        INSERT INTO deleted_documents (original_id, doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, subtotal, tax_amt, grand_total, status, items_json, deleted_at)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (doc_data['id'], doc_data['doc_type'], doc_data['doc_num'], doc_data['client_name'], doc_data['client_phone'], doc_data['client_gstin'], doc_data['client_state'], doc_data['doc_date'], doc_data['subtotal'], doc_data['tax_amt'], doc_data['grand_total'], doc_data['status'], doc_data['items_json'], str(date.today())))
+                    ''', (int(doc_data['id']), doc_data['doc_type'], doc_data['doc_num'], doc_data['client_name'], doc_data['client_phone'], doc_data['client_gstin'], doc_data['client_state'], doc_data['doc_date'], doc_data['subtotal'], doc_data['tax_amt'], doc_data['grand_total'], doc_data['status'], doc_data['items_json'], str(date.today())))
                     
                     cursor.execute("DELETE FROM documents WHERE id = ?", (int(selected_id),))
                     conn.commit()
@@ -667,27 +667,27 @@ elif choice == "Document History & Management":
 
             with tab_bin:
                 st.subheader("♻️ Recycle Bin — Deleted Documents")
-                bin_df = pd.read_sql_query("SELECT id, doc_type, doc_num, client_name, grand_total, deleted_at FROM deleted_documents ORDER BY id DESC", conn)
+                bin_df = pd.read_sql_query("SELECT bin_id, original_id, doc_type, doc_num, client_name, grand_total, deleted_at FROM deleted_documents ORDER BY bin_id DESC", conn)
                 if not bin_df.empty:
                     st.dataframe(bin_df, use_container_width=True)
-                    restore_id = st.number_input("Enter ID to Restore or Delete Permanently", min_value=int(bin_df['id'].min()), max_value=int(bin_df['id'].max()), step=1, key="restore_id_input")
+                    restore_bin_id = st.number_input("Enter Bin ID to Restore or Delete Permanently", min_value=int(bin_df['bin_id'].min()), max_value=int(bin_df['bin_id'].max()), step=1, key="restore_id_input")
                     
                     col_r1, col_r2 = st.columns(2)
                     with col_r1:
                         if st.button("♻️ Restore Document"):
-                            bin_row = cursor.execute("SELECT * FROM deleted_documents WHERE id = ?", (int(restore_id),)).fetchone()
+                            bin_row = cursor.execute("SELECT * FROM deleted_documents WHERE bin_id = ?", (int(restore_bin_id),)).fetchone()
                             if bin_row:
                                 cursor.execute('''
                                     INSERT OR REPLACE INTO documents (id, doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, subtotal, tax_amt, grand_total, status, items_json)
                                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                                ''', (bin_row[0], bin_row[1], bin_row[2], bin_row[3], bin_row[4], bin_row[5], bin_row[6], bin_row[7], bin_row[8], bin_row[9], bin_row[10], bin_row[11], bin_row[12]))
-                                cursor.execute("DELETE FROM deleted_documents WHERE id = ?", (int(restore_id),))
+                                ''', (bin_row[1], bin_row[2], bin_row[3], bin_row[4], bin_row[5], bin_row[6], bin_row[7], bin_row[8], bin_row[9], bin_row[10], bin_row[11], bin_row[12], bin_row[13]))
+                                cursor.execute("DELETE FROM deleted_documents WHERE bin_id = ?", (int(restore_bin_id),))
                                 conn.commit()
                                 st.success("Document successfully restored!")
                                 st.rerun()
                     with col_r2:
                         if st.button("❌ Delete Permanently", type="primary"):
-                            cursor.execute("DELETE FROM deleted_documents WHERE id = ?", (int(restore_id),))
+                            cursor.execute("DELETE FROM deleted_documents WHERE bin_id = ?", (int(restore_bin_id),))
                             conn.commit()
                             st.warning("Document permanently deleted.")
                             st.rerun()
