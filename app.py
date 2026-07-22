@@ -32,6 +32,14 @@ cursor.execute('''
     )
 ''')
 cursor.execute('''
+    CREATE TABLE IF NOT EXISTS deleted_documents (
+        id INTEGER PRIMARY KEY,
+        doc_type TEXT, doc_num TEXT, client_name TEXT, client_phone TEXT, client_gstin TEXT, client_state TEXT,
+        doc_date TEXT, subtotal REAL, tax_amt REAL, grand_total REAL,
+        status TEXT, items_json TEXT, deleted_at TEXT
+    )
+''')
+cursor.execute('''
     CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY,
         value BLOB
@@ -616,8 +624,8 @@ elif choice == "Document History & Management":
             except:
                 items_list = []
 
-            tab_view, tab_add_item, tab_print, tab_edit, tab_status, tab_delete = st.tabs([
-                "👁️ View Actual Layout", "➕ Add Items", "🖨️ Print Copies", "✏️ Edit Info", "🔄 Update Status", "🗑️ Delete Invoice"
+            tab_view, tab_print, tab_status, tab_delete, tab_bin = st.tabs([
+                "👁️ View Actual Layout", "🖨️ Print Copies", "🔄 Update Status", "🗑️ Move to Recycle Bin", "♻️ Recycle Bin"
             ])
 
             with tab_view:
@@ -630,97 +638,105 @@ elif choice == "Document History & Management":
                 )
                 st.components.v1.html(html_preview_existing, height=650, scrolling=True)
 
-            with tab_add_item:
-                with st.form("add_new_item_to_existing_doc"):
-                    col_i1, col_i2, col_i3, col_i4 = st.columns([3, 1, 1, 1])
-                    with col_i1:
-                        new_desc = st.text_input("New Item Description")
-                    with col_i2:
-                        new_qty = st.number_input("Qty", min_value=1, value=1)
-                    with col_i3:
-                        new_rate = st.number_input("Rate (₹)", min_value=0.0, step=100.0)
-                    with col_i4:
-                        new_tax = st.number_input("GST Tax %", min_value=0.0, value=18.0)
-
-                    if st.form_submit_button("+ Append Item & Recalculate") and new_desc:
-                        items_list.append({"desc": new_desc, "qty": new_qty, "rate": new_rate, "tax_rate": new_tax})
-                        new_subtotal = sum(i['qty'] * i['rate'] for i in items_list)
-                        new_tax_amt = sum((i['qty'] * i['rate']) * (i['tax_rate']/100) for i in items_list)
-                        new_grand_total = new_subtotal + new_tax_amt
-
-                        cursor.execute('UPDATE documents SET items_json=?, subtotal=?, tax_amt=?, grand_total=? WHERE id=?',
-                                       (json.dumps(items_list), new_subtotal, new_tax_amt, new_grand_total, selected_id))
-                        conn.commit()
-                        st.success(f"Added '{new_desc}'!")
-                        st.rerun()
-
             with tab_print:
+                st.subheader("🖨️ Print / Download Copies")
                 col_p1, col_p2 = st.columns(2)
                 with col_p1:
                     pdf_orig = generate_pdf(
-                        doc_data['doc_type'], doc_data['doc_num'], doc_data['client_name'], 
-                        doc_data['client_phone'], doc_data['client_gstin'], doc_data['client_state'],
-                        doc_data['doc_date'], items_list, doc_data['subtotal'], doc_data['tax_amt'], 
-                        doc_data['grand_total']
+                        doc_data['doc_type'], doc_data['doc_num'], doc_data['client_name'], doc_data['client_phone'],
+                        doc_data['client_gstin'], doc_data['client_state'], doc_data['doc_date'], items_list,
+                        doc_data['subtotal'], doc_data['tax_amt'], doc_data['grand_total'], is_duplicate=False
                     )
-                    st.download_button("📄 Download Invoice PDF", data=pdf_orig, file_name=f"{doc_data['doc_num']}.pdf", mime="application/pdf")
-
+                    st.download_button(label="📥 Download Original Copy", data=pdf_orig, file_name=f"{doc_data['doc_num']}_Original.pdf", mime="application/pdf")
                 with col_p2:
                     pdf_dup = generate_pdf(
-                        doc_data['doc_type'], doc_data['doc_num'], doc_data['client_name'], 
-                        doc_data['client_phone'], doc_data['client_gstin'], doc_data['client_state'],
-                        doc_data['doc_date'], items_list, doc_data['subtotal'], doc_data['tax_amt'], 
-                        doc_data['grand_total'], is_duplicate=True
+                        doc_data['doc_type'], doc_data['doc_num'], doc_data['client_name'], doc_data['client_phone'],
+                        doc_data['client_gstin'], doc_data['client_state'], doc_data['doc_date'], items_list,
+                        doc_data['subtotal'], doc_data['tax_amt'], doc_data['grand_total'], is_duplicate=True
                     )
-                    st.download_button("📋 Download DUPLICATE Copy PDF", data=pdf_dup, file_name=f"{doc_data['doc_num']}_Duplicate.pdf", mime="application/pdf")
-
-            with tab_edit:
-                with st.form("edit_doc_form"):
-                    e_client_name = st.text_input("Client Name", value=doc_data['client_name'])
-                    e_client_phone = st.text_input("Client Phone", value=doc_data['client_phone'])
-                    e_client_state = st.text_input("Client State", value=doc_data['client_state'] if doc_data['client_state'] else "Karnataka")
-                    e_client_gstin = st.text_input("Client GSTIN", value=doc_data['client_gstin'] if doc_data['client_gstin'] else "")
-                    
-                    e_subtotal = st.number_input("Subtotal (₹)", value=float(doc_data['subtotal']), step=100.0)
-                    e_tax = st.number_input("GST Tax Amount (₹)", value=float(doc_data['tax_amt']), step=50.0)
-                    e_grand = e_subtotal + e_tax
-
-                    if st.form_submit_button("💾 Save Changes"):
-                        cursor.execute('''
-                            UPDATE documents 
-                            SET client_name=?, client_phone=?, client_state=?, client_gstin=?, subtotal=?, tax_amt=?, grand_total=? 
-                            WHERE id=?
-                        ''', (e_client_name, e_client_phone, e_client_state, e_client_gstin, e_subtotal, e_tax, e_grand, selected_id))
-                        conn.commit()
-                        st.success("Invoice info updated!")
-                        st.rerun()
+                    st.download_button(label="📥 Download Duplicate Copy", data=pdf_dup, file_name=f"{doc_data['doc_num']}_Duplicate.pdf", mime="application/pdf")
 
             with tab_status:
-                curr_status = doc_data['status']
-                statuses = ["Paid", "Pending", "Sent", "Cancelled", "Draft"]
-                status_idx = statuses.index(curr_status) if curr_status in statuses else 0
-                new_status = st.selectbox("Select New Status", statuses, index=status_idx)
-                
-                if st.button("Update Status Now"):
-                    cursor.execute("UPDATE documents SET status = ? WHERE id = ?", (new_status, selected_id))
+                st.subheader("🔄 Update Status")
+                new_status = st.selectbox("Select New Status", ["Paid", "Pending", "Sent", "Draft"], index=["Paid", "Pending", "Sent", "Draft"].index(doc_data['status']) if doc_data['status'] in ["Paid", "Pending", "Sent", "Draft"] else 0)
+                if st.button("Update Status"):
+                    cursor.execute("UPDATE documents SET status = ? WHERE id = ?", (new_status, int(selected_id)))
                     conn.commit()
-                    st.success("Status updated!")
+                    st.success("Document status updated successfully!")
                     st.rerun()
 
             with tab_delete:
-                st.warning(f"⚠️ Warning: Deleting ID #{selected_id}.")
-                confirm_delete = st.checkbox("I confirm permanent deletion.")
-                if st.button("🗑️ Permanently Delete Invoice", type="primary"):
-                    if confirm_delete:
-                        cursor.execute("DELETE FROM documents WHERE id = ?", (selected_id,))
-                        conn.commit()
-                        st.success("Document deleted!")
-                        st.rerun()
+                st.warning("Moving this document to the Recycle Bin will remove it from active records. You can restore it anytime from the Recycle Bin tab.")
+                if st.button("🗑️ Move Document to Recycle Bin", type="primary"):
+                    cursor.execute('''
+                        INSERT INTO deleted_documents (id, doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, subtotal, tax_amt, grand_total, status, items_json, deleted_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (doc_data['id'], doc_data['doc_type'], doc_data['doc_num'], doc_data['client_name'], doc_data['client_phone'], doc_data['client_gstin'], doc_data['client_state'], doc_data['doc_date'], doc_data['subtotal'], doc_data['tax_amt'], doc_data['grand_total'], doc_data['status'], doc_data['items_json'], str(date.today())))
+                    cursor.execute("DELETE FROM documents WHERE id = ?", (int(selected_id),))
+                    conn.commit()
+                    st.success("Document moved to Recycle Bin!")
+                    st.rerun()
+
+            with tab_bin:
+                st.subheader("♻️ Recycle Bin — Deleted Documents")
+                bin_df = pd.read_sql_query("SELECT id, doc_type, doc_num, client_name, grand_total, deleted_at FROM deleted_documents ORDER BY id DESC", conn)
+                if not bin_df.empty:
+                    st.dataframe(bin_df, use_container_width=True)
+                    restore_id = st.number_input("Enter ID to Restore or Delete Permanently", min_value=int(bin_df['id'].min()), max_value=int(bin_df['id'].max()), step=1, key="restore_id_input")
+                    
+                    col_r1, col_r2 = st.columns(2)
+                    with col_r1:
+                        if st.button("♻️ Restore Document"):
+                            bin_row = cursor.execute("SELECT * FROM deleted_documents WHERE id = ?", (int(restore_id),)).fetchone()
+                            if bin_row:
+                                cursor.execute('''
+                                    INSERT INTO documents (id, doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, subtotal, tax_amt, grand_total, status, items_json)
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                ''', (bin_row[0], bin_row[1], bin_row[2], bin_row[3], bin_row[4], bin_row[5], bin_row[6], bin_row[7], bin_row[8], bin_row[9], bin_row[10], bin_row[11], bin_row[12]))
+                                cursor.execute("DELETE FROM deleted_documents WHERE id = ?", (int(restore_id),))
+                                conn.commit()
+                                st.success("Document successfully restored!")
+                                st.rerun()
+                    with col_r2:
+                        if st.button("❌ Delete Permanently", type="primary"):
+                            cursor.execute("DELETE FROM deleted_documents WHERE id = ?", (int(restore_id),))
+                            conn.commit()
+                            st.warning("Document permanently deleted.")
+                            st.rerun()
+                else:
+                    st.info("Recycle bin is currently empty.")
     else:
-        st.info("No documents created yet.")
+        st.info("No documents generated yet. Create one from the sidebar menu!")
 
 # --- 3. CLIENT DIRECTORY ---
 elif choice == "Client Directory":
-    st.header("👤 Saved Clients")
-    clients_df = pd.read_sql_query("SELECT * FROM clients", conn)
-    st.dataframe(clients_df, use_container_width=True)
+    st.header("📇 Client Directory")
+    
+    clients_df = pd.read_sql_query("SELECT id, name, phone, email, address, state, tax_id FROM clients ORDER BY name ASC", conn)
+    
+    with st.form("add_client_form", clear_on_submit=True):
+        st.subheader("Add New Client Profile")
+        c_col1, c_col2 = st.columns(2)
+        with c_col1:
+            new_c_name = st.text_input("Client / Business Name")
+            new_c_phone = st.text_input("Phone Number")
+            new_c_email = st.text_input("Email Address")
+        with c_col2:
+            new_c_state = st.text_input("State", value="Karnataka")
+            new_c_gstin = st.text_input("GSTIN / Tax ID")
+            new_c_addr = st.text_area("Billing Address")
+            
+        submitted_client = st.form_submit_button("Save Client")
+        if submitted_client and new_c_name:
+            cursor.execute("INSERT INTO clients (name, phone, email, address, state, tax_id) VALUES (?, ?, ?, ?, ?, ?)",
+                           (new_c_name, new_c_phone, new_c_email, new_c_addr, new_c_state, new_c_gstin))
+            conn.commit()
+            st.success(f"Client '{new_c_name}' added successfully!")
+            st.rerun()
+
+    st.divider()
+    st.subheader("Existing Clients Register")
+    if not clients_df.empty:
+        st.dataframe(clients_df, use_container_width=True)
+    else:
+        st.info("No clients registered yet.")
