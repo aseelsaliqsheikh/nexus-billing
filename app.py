@@ -4,7 +4,7 @@ import sqlite3
 import json
 import os
 from datetime import datetime, date
-from reportlab.lib.pagesizes import letter 
+from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, HRFlowable
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -300,7 +300,7 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
     buffer.seek(0)
     return buffer
 
-# --- HTML PREVIEW RENDERER (Actual Layout Simulation) ---
+# --- HTML PREVIEW RENDERER ---
 def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, items, subtotal, tax_amt, grand_total, is_duplicate=False):
     c_state_str = client_state if client_state else "Karnataka"
     is_intra_state = (c_state_str.strip().lower() == COMPANY_STATE.lower())
@@ -374,7 +374,6 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
 
     html_content = f"""
     <div style="background-color: #ffffff; color: #1E293B; padding: 30px; font-family: Helvetica, Arial, sans-serif; border: 1px solid #CBD5E1; border-radius: 6px; max-width: 800px; margin: auto;">
-        <!-- Header Section -->
         <table style="width: 100%; border-collapse: collapse;">
             <tr>
                 <td style="vertical-align: top; width: 55%;">
@@ -396,7 +395,6 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
         
         <hr style="border: none; border-top: 1.5px solid #0F172A; margin: 15px 0;" />
 
-        <!-- Client & Tax Details Box -->
         <table style="width: 100%; border-collapse: collapse; background-color: #F8FAFC; border: 0.5px solid #CBD5E1; margin-bottom: 15px;">
             <tr>
                 <td style="padding: 12px; vertical-align: top; width: 50%;">
@@ -414,19 +412,13 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
             </tr>
         </table>
 
-        <!-- Line Items Table -->
         <table style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 15px;">
             <thead>
-                <tr>
-                    {header_headers}
-                </tr>
+                <tr>{header_headers}</tr>
             </thead>
-            <tbody>
-                {items_html}
-            </tbody>
+            <tbody>{items_html}</tbody>
         </table>
 
-        <!-- Summary Totals Table -->
         <table style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 20px;">
             <tr>
                 <td style="width: 60%;"></td>
@@ -438,7 +430,6 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
             </tr>
         </table>
 
-        <!-- Footer / Payment & Terms -->
         <table style="width: 100%; border-collapse: collapse; background-color: #F8FAFC; border: 0.5px solid #CBD5E1;">
             <tr>
                 <td style="padding: 10px; vertical-align: top; width: 50%;">
@@ -552,13 +543,11 @@ if choice == "Create Document":
         st.markdown(f"#### Subtotal: ₹{subtotal:,.2f} | GST Tax Total: ₹{tax_amt:,.2f}")
         st.markdown(f"### **Grand Total: ₹{grand_total:,.2f}**")
 
-        # --- LIVE PREVIEW TAB CONTAINER ---
         st.divider()
         st.subheader("👁️ Live Layout Preview")
         preview_tab, save_tab = st.tabs(["📄 View Actual Layout", "💾 Save Document"])
 
         with preview_tab:
-            st.info("Below is the exact visual representation of how the layout looks before generating or downloading the final copy.")
             html_preview = render_html_preview(
                 doc_type, doc_num, client_name if client_name else "Client Name Placeholder", 
                 client_phone, client_gstin, client_state, str(doc_date), 
@@ -629,7 +618,6 @@ elif choice == "Document History & Management":
             ])
 
             with tab_view:
-                st.markdown(f"### **Visual Layout Preview — {doc_data['doc_type']} (#{doc_data['doc_num']})**")
                 html_preview_existing = render_html_preview(
                     doc_data['doc_type'], doc_data['doc_num'], doc_data['client_name'], 
                     doc_data['client_phone'], doc_data['client_gstin'], doc_data['client_state'],
@@ -639,7 +627,6 @@ elif choice == "Document History & Management":
                 st.components.v1.html(html_preview_existing, height=650, scrolling=True)
 
             with tab_print:
-                st.subheader("🖨️ Print / Download Copies")
                 col_p1, col_p2 = st.columns(2)
                 with col_p1:
                     pdf_orig = generate_pdf(
@@ -657,7 +644,6 @@ elif choice == "Document History & Management":
                     st.download_button(label="📥 Download Duplicate Copy", data=pdf_dup, file_name=f"{doc_data['doc_num']}_Duplicate.pdf", mime="application/pdf")
 
             with tab_status:
-                st.subheader("🔄 Update Status")
                 new_status = st.selectbox("Select New Status", ["Paid", "Pending", "Sent", "Draft"], index=["Paid", "Pending", "Sent", "Draft"].index(doc_data['status']) if doc_data['status'] in ["Paid", "Pending", "Sent", "Draft"] else 0)
                 if st.button("Update Status"):
                     cursor.execute("UPDATE documents SET status = ? WHERE id = ?", (new_status, int(selected_id)))
@@ -666,12 +652,14 @@ elif choice == "Document History & Management":
                     st.rerun()
 
             with tab_delete:
-                st.warning("Moving this document to the Recycle Bin will remove it from active records. You can restore it anytime from the Recycle Bin tab.")
+                st.warning("Moving this document to the Recycle Bin will remove it from active records. You can restore it anytime.")
                 if st.button("🗑️ Move Document to Recycle Bin", type="primary"):
+                    # Using INSERT OR REPLACE to prevent SQLite IntegrityError if ID already exists in bin
                     cursor.execute('''
-                        INSERT INTO deleted_documents (id, doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, subtotal, tax_amt, grand_total, status, items_json, deleted_at)
+                        INSERT OR REPLACE INTO deleted_documents (id, doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, subtotal, tax_amt, grand_total, status, items_json, deleted_at)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ''', (doc_data['id'], doc_data['doc_type'], doc_data['doc_num'], doc_data['client_name'], doc_data['client_phone'], doc_data['client_gstin'], doc_data['client_state'], doc_data['doc_date'], doc_data['subtotal'], doc_data['tax_amt'], doc_data['grand_total'], doc_data['status'], doc_data['items_json'], str(date.today())))
+                    
                     cursor.execute("DELETE FROM documents WHERE id = ?", (int(selected_id),))
                     conn.commit()
                     st.success("Document moved to Recycle Bin!")
@@ -690,7 +678,7 @@ elif choice == "Document History & Management":
                             bin_row = cursor.execute("SELECT * FROM deleted_documents WHERE id = ?", (int(restore_id),)).fetchone()
                             if bin_row:
                                 cursor.execute('''
-                                    INSERT INTO documents (id, doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, subtotal, tax_amt, grand_total, status, items_json)
+                                    INSERT OR REPLACE INTO documents (id, doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, subtotal, tax_amt, grand_total, status, items_json)
                                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                                 ''', (bin_row[0], bin_row[1], bin_row[2], bin_row[3], bin_row[4], bin_row[5], bin_row[6], bin_row[7], bin_row[8], bin_row[9], bin_row[10], bin_row[11], bin_row[12]))
                                 cursor.execute("DELETE FROM deleted_documents WHERE id = ?", (int(restore_id),))
@@ -706,7 +694,7 @@ elif choice == "Document History & Management":
                 else:
                     st.info("Recycle bin is currently empty.")
     else:
-        st.info("No documents generated yet. Create one from the sidebar menu!")
+        st.info("No documents generated yet.")
 
 # --- 3. CLIENT DIRECTORY ---
 elif choice == "Client Directory":
