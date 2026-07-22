@@ -520,15 +520,10 @@ if choice == "Create Document":
     st.subheader("📦 Line Items")
     
     if "item_list" not in st.session_state:
-        st.session_state.item_list = [
-            {"desc": "Event Conceptualization & Theme Design", "qty": 1, "rate": 15000.0, "tax_rate": 18.0},
-            {"desc": "Stage Setup & Production Management", "qty": 2, "rate": 25000.0, "tax_rate": 18.0},
-            {"desc": "Professional Sound & Lighting System", "qty": 1, "rate": 18000.0, "tax_rate": 18.0},
-            {"desc": "On-Ground Operations Supervision & Crew", "qty": 3, "rate": 5000.0, "tax_rate": 18.0},
-            {"desc": "Digital Media Coverage & Reel Editing", "qty": 1, "rate": 10000.0, "tax_rate": 18.0}
-        ]
+        st.session_state.item_list = []
 
     with st.form("add_item_form", clear_on_submit=True):
+        st.write("Add line items one by one below:")
         f_col1, f_col2, f_col3, f_col4 = st.columns([3, 1, 1, 1])
         with f_col1:
             item_desc = st.text_input("Item Description / Service Name")
@@ -547,7 +542,7 @@ if choice == "Create Document":
                 "rate": item_rate,
                 "tax_rate": item_tax
             })
-            st.success(f"Added '{item_desc}'")
+            st.success(f"Added '{item_desc}' to document!")
 
     if st.session_state.item_list:
         st.write("### Current Items in Document")
