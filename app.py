@@ -136,24 +136,20 @@ def get_theme_from_db():
         return row[0].decode('utf-8')
     return "Modern Minimalist (Clean Slate)"
 
-# --- WATERMARK CANVAS CALLBACK (LOGO WATERMARK) ---
+# --- TEXT WATERMARK CANVAS CALLBACK ("NEXUS EVENTS") ---
 def draw_watermark(canvas, doc):
-    logo_file = get_logo_from_db()
-    if logo_file:
-        try:
-            canvas.saveState()
-            canvas.setFillAlpha(0.15)
-            img = ImageReader(logo_file)
-            img_width = 250
-            img_height = 125
-            page_width, page_height = letter
-            
-            canvas.translate(page_width / 2.0, page_height / 2.0)
-            canvas.rotate(30)
-            canvas.drawImage(img, -img_width / 2.0, -img_height / 2.0, width=img_width, height=img_height, mask='auto')
-            canvas.restoreState()
-        except Exception:
-            pass
+    try:
+        canvas.saveState()
+        canvas.setFont("Helvetica-Bold", 55)
+        canvas.setFillColor(colors.HexColor("#0F172A"), alpha=0.08)
+        page_width, page_height = letter
+        
+        canvas.translate(page_width / 2.0, page_height / 2.0)
+        canvas.rotate(30)
+        canvas.drawCentredString(0, 0, "NEXUS EVENTS")
+        canvas.restoreState()
+    except Exception:
+        pass
 
 # --- PROFESSIONAL PDF GENERATOR ENGINE ---
 def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, items, subtotal, tax_amt, grand_total, is_duplicate=False, theme="Modern Minimalist (Clean Slate)"):
@@ -204,7 +200,7 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
     logo_container = None
     if logo_file:
         try:
-            logo_img = Image(logo_file, width=90, height=45)
+            logo_img = Image(logo_file, width=130, height=65)
             logo_img.hAlign = 'LEFT'
             logo_container = logo_img
         except Exception:
@@ -372,7 +368,7 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
     buffer.seek(0)
     return buffer
 
-# --- HTML PREVIEW RENDERER (LOGO WATERMARK) ---
+# --- HTML PREVIEW RENDERER ("NEXUS EVENTS" TEXT WATERMARK) ---
 def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, items, subtotal, tax_amt, grand_total, is_duplicate=False, theme="Modern Minimalist (Clean Slate)"):
     if theme == "Executive Dark (Bold & Corporate)":
         primary_color = "#111827"
@@ -400,14 +396,12 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
     
     dup_banner = f"<div style='color: #DC2626; font-weight: bold; font-size: 16px; margin-bottom: 5px;'>*** DUPLICATE COPY ***</div>" if is_duplicate else ""
     
-    logo_b64 = get_logo_base64()
-    logo_watermark_html = ""
-    if logo_b64:
-        logo_watermark_html = f"""
-        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); opacity: 0.15; z-index: 10; pointer-events: none;">
-            <img src="data:image/png;base64,{logo_b64}" style="width: 300px; height: auto;" />
-        </div>
-        """
+    # Text watermark overlay HTML
+    text_watermark_html = f"""
+    <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); opacity: 0.08; z-index: 10; pointer-events: none; font-size: 55px; font-weight: bold; color: {primary_color}; white-space: nowrap; font-family: Helvetica, Arial, sans-serif;">
+        NEXUS EVENTS
+    </div>
+    """
 
     items_html = ""
     for idx, item in enumerate(items, start=1):
@@ -481,8 +475,8 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
     html_content = f"""
     <div style="position: relative; background-color: #ffffff; color: #1E293B; padding: 30px; font-family: Helvetica, Arial, sans-serif; border: 1px solid {border_clr}; border-radius: 6px; max-width: 800px; margin: auto; overflow: hidden;">
         
-        <!-- Logo Watermark Overlay -->
-        {logo_watermark_html}
+        <!-- Text Watermark Overlay -->
+        {text_watermark_html}
 
         <table style="width: 100%; border-collapse: collapse; position: relative; z-index: 1;">
             <tr>
