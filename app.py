@@ -140,7 +140,7 @@ def save_theme_to_db(theme_name):
 def get_theme_from_db():
     return get_setting('invoice_theme', "Modern Minimalist (Clean Slate)")
 
-# --- TEXT WATERMARK CANVAS CALLBACK ("NEXUS EVENTS" OR CUSTOM) ---
+# --- TEXT WATERMARK CANVAS CALLBACK ---
 def draw_watermark(canvas, doc):
     try:
         canvas.saveState()
@@ -163,7 +163,6 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
     story = []
     styles = getSampleStyleSheet()
 
-    # Dynamic Theme Palettes
     if theme == "Executive Dark (Bold & Corporate)":
         PRIMARY = colors.HexColor("#111827")
         SECONDARY = colors.HexColor("#4B5563")
@@ -568,7 +567,6 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
     html_content = f"""
     <div style="position: relative; background-color: #ffffff; color: #1E293B; padding: 30px; font-family: Helvetica, Arial, sans-serif; border: 1px solid {border_clr}; border-radius: 6px; max-width: 800px; margin: auto; overflow: hidden;">
         
-        <!-- Text Watermark Overlay -->
         {text_watermark_html}
 
         <table style="width: 100%; border-collapse: collapse; position: relative; z-index: 1;">
