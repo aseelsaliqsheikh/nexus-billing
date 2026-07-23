@@ -3,11 +3,13 @@ import pandas as pd
 import sqlite3
 import json
 import os
+import base64
 from datetime import datetime, date
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, HRFlowable
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.utils import ImageReader
 import io
 
 # --- PAGE CONFIGURATION ---
@@ -118,6 +120,12 @@ def get_logo_from_db():
         return io.BytesIO(row[0])
     return None
 
+def get_logo_base64():
+    logo_file = get_logo_from_db()
+    if logo_file:
+        return base64.b64encode(logo_file.getvalue()).decode('utf-8')
+    return None
+
 def save_theme_to_db(theme_name):
     cursor.execute("REPLACE INTO settings (key, value) VALUES ('invoice_theme', ?)", (theme_name.encode('utf-8'),))
     conn.commit()
@@ -128,17 +136,26 @@ def get_theme_from_db():
         return row[0].decode('utf-8')
     return "Modern Minimalist (Clean Slate)"
 
-# --- WATERMARK CANVAS CALLBACK ---
+# --- WATERMARK CANVAS CALLBACK (LOGO WATERMARK) ---
 def draw_watermark(canvas, doc):
-    canvas.saveState()
-    canvas.setFont("Helvetica-Bold", 60)
-    canvas.setFillColor(colors.HexColor("#E2E8F0"), alpha=0.3)
-    canvas.translate(300, 400)
-    canvas.rotate(45)
-    canvas.drawCentredString(0, 0, "NEXUS EVENTS")
-    canvas.restoreState()
+    logo_file = get_logo_from_db()
+    if logo_file:
+        try:
+            canvas.saveState()
+            canvas.setFillAlpha(0.15)
+            img = ImageReader(logo_file)
+            img_width = 250
+            img_height = 125
+            page_width, page_height = letter
+            
+            canvas.translate(page_width / 2.0, page_height / 2.0)
+            canvas.rotate(30)
+            canvas.drawImage(img, -img_width / 2.0, -img_height / 2.0, width=img_width, height=img_height, mask='auto')
+            canvas.restoreState()
+        except Exception:
+            pass
 
-# --- PROFESSIONAL PDF GENERATOR ENGINE (WITH WATERMARK & REDESIGNED STYLES) ---
+# --- PROFESSIONAL PDF GENERATOR ENGINE ---
 def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, items, subtotal, tax_amt, grand_total, is_duplicate=False, theme="Modern Minimalist (Clean Slate)"):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
@@ -355,7 +372,7 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
     buffer.seek(0)
     return buffer
 
-# --- HTML PREVIEW RENDERER (THEME-AWARE WITH WATERMARK) ---
+# --- HTML PREVIEW RENDERER (LOGO WATERMARK) ---
 def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, items, subtotal, tax_amt, grand_total, is_duplicate=False, theme="Modern Minimalist (Clean Slate)"):
     if theme == "Executive Dark (Bold & Corporate)":
         primary_color = "#111827"
@@ -383,6 +400,15 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
     
     dup_banner = f"<div style='color: #DC2626; font-weight: bold; font-size: 16px; margin-bottom: 5px;'>*** DUPLICATE COPY ***</div>" if is_duplicate else ""
     
+    logo_b64 = get_logo_base64()
+    logo_watermark_html = ""
+    if logo_b64:
+        logo_watermark_html = f"""
+        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); opacity: 0.15; z-index: 10; pointer-events: none;">
+            <img src="data:image/png;base64,{logo_b64}" style="width: 300px; height: auto;" />
+        </div>
+        """
+
     items_html = ""
     for idx, item in enumerate(items, start=1):
         line_sub = item['qty'] * item['rate']
@@ -455,10 +481,8 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
     html_content = f"""
     <div style="position: relative; background-color: #ffffff; color: #1E293B; padding: 30px; font-family: Helvetica, Arial, sans-serif; border: 1px solid {border_clr}; border-radius: 6px; max-width: 800px; margin: auto; overflow: hidden;">
         
-        <!-- Watermark Overlay -->
-        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-45deg); font-size: 64px; font-weight: bold; color: #E2E8F0; opacity: 0.3; z-index: 10; pointer-events: none; white-space: nowrap;">
-            NEXUS EVENTS
-        </div>
+        <!-- Logo Watermark Overlay -->
+        {logo_watermark_html}
 
         <table style="width: 100%; border-collapse: collapse; position: relative; z-index: 1;">
             <tr>
@@ -549,7 +573,7 @@ st.sidebar.divider()
 st.sidebar.subheader("🎨 Invoice Design & Branding")
 current_theme = get_theme_from_db()
 selected_theme = st.sidebar.selectbox(
-    "Choose InvoiceTheme Style", 
+    "Choose Invoice Theme Style", 
     ["Modern Minimalist (Clean Slate)", "Executive Dark (Bold & Corporate)", "Creative Vibrant (Blue & Slate)", "Warm Editorial (Classic & Refined)"],
     index=["Modern Minimalist (Clean Slate)", "Executive Dark (Bold & Corporate)", "Creative Vibrant (Blue & Slate)", "Warm Editorial (Classic & Refined)"].index(current_theme) if current_theme in ["Modern Minimalist (Clean Slate)", "Executive Dark (Bold & Corporate)", "Creative Vibrant (Blue & Slate)", "Warm Editorial (Classic & Refined)"] else 0
 )
@@ -647,7 +671,6 @@ if choice == "Create Document":
     st.subheader("👁️ Live Document Preview & Export")
 
     if st.session_state.item_list and client_name:
-        # Render HTML preview with theme & watermark
         preview_html = render_html_preview(
             doc_type, doc_num, client_name, client_phone, client_gstin, client_state, 
             str(doc_date), st.session_state.item_list, subtotal, tax_amt, grand_total, 
@@ -712,7 +735,6 @@ elif choice == "Document History & Management":
                 
                 st.write(f"### Managing: {d_num} ({c_name})")
                 
-                # Live Preview of existing saved document
                 preview_html = render_html_preview(
                     d_type, d_num, c_name, c_phone, c_gstin, c_state, d_date, items, sub, tax, g_tot, is_duplicate=False, theme=selected_theme
                 )
