@@ -91,52 +91,58 @@ if "bin_id" not in deleted_cols or "original_id" not in deleted_cols:
     ''')
     conn.commit()
 
-# --- COMPANY DETAILS ---
-COMPANY_NAME = "NEXUS CENTER OF EVENTS"
-COMPANY_SUB = "Event Planning, Execution & Corporate Management"
-COMPANY_ADDR = "Bangalore, Karnataka, India"
-COMPANY_STATE = "Karnataka"
-COMPANY_PHONE = "+91 98765 43210"
-COMPANY_EMAIL = "info@nexusevents.com"
-COMPANY_GSTIN = "29AAAAA0000A1Z5"
+# --- DEFAULT COMPANY & SETTINGS FUNCTIONS ---
+DEFAULT_SETTINGS = {
+    "company_name": "NEXUS CENTER OF EVENTS",
+    "company_sub": "Event Planning, Execution & Corporate Management",
+    "company_addr": "Bangalore, Karnataka, India",
+    "company_state": "Karnataka",
+    "company_phone": "+91 98765 43210",
+    "company_email": "info@nexusevents.com",
+    "company_gstin": "29AAAAA0000A1Z5",
+    "bank_name": "HDFC Bank",
+    "account_holder": "Nexus Center of Events",
+    "account_number": "50200012345678",
+    "ifsc_code": "HDFC0001234",
+    "upi_id": "nexus@upi",
+    "terms_conditions": "1. Payment due within 15 days of invoice date.\n2. Quote invoice # on payment.\n3. Subject to Bangalore jurisdiction."
+}
 
-# --- BANK / PAYMENT DETAILS ---
-BANK_NAME = "HDFC Bank"
-ACCOUNT_HOLDER = "Nexus Center of Events"
-ACCOUNT_NUMBER = "50200012345678"
-IFSC_CODE = "HDFC0001234"
-UPI_ID = "nexus@upi"
+def get_setting(key, default_val):
+    row = cursor.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    if row and row[0] is not None:
+        try:
+            return row[0].decode('utf-8')
+        except Exception:
+            return default_val
+    return default_val
+
+def save_setting(key, val):
+    cursor.execute("REPLACE INTO settings (key, value) VALUES (?, ?)", (key, val.encode('utf-8')))
+    conn.commit()
 
 # --- HELPER FUNCTIONS FOR PERSISTENT LOGO & THEME ---
 def save_logo_to_db(uploaded_file):
     if uploaded_file is not None:
         logo_bytes = uploaded_file.getvalue()
-        cursor.execute("REPLACE INTO settings (key, value) VALUES ('company_logo', ?)", (logo_bytes,))
+        cursor.execute("REPLACE INTO settings (key, value) VALUES ('company_logo', ?)", ('company_logo_bin', logo_bytes)) # stored safely
+        # Actually store under explicit binary blob key
+        cursor.execute("REPLACE INTO settings (key, value) VALUES ('company_logo_blob', ?)", (logo_bytes,))
         conn.commit()
 
 def get_logo_from_db():
-    row = cursor.execute("SELECT value FROM settings WHERE key = 'company_logo'").fetchone()
+    row = cursor.execute("SELECT value FROM settings WHERE key = 'company_logo_blob'").fetchone()
     if row and row[0]:
         return io.BytesIO(row[0])
     return None
 
-def get_logo_base64():
-    logo_file = get_logo_from_db()
-    if logo_file:
-        return base64.b64encode(logo_file.getvalue()).decode('utf-8')
-    return None
-
 def save_theme_to_db(theme_name):
-    cursor.execute("REPLACE INTO settings (key, value) VALUES ('invoice_theme', ?)", (theme_name.encode('utf-8'),))
-    conn.commit()
+    save_setting('invoice_theme', theme_name)
 
 def get_theme_from_db():
-    row = cursor.execute("SELECT value FROM settings WHERE key = 'invoice_theme'").fetchone()
-    if row and row[0]:
-        return row[0].decode('utf-8')
-    return "Modern Minimalist (Clean Slate)"
+    return get_setting('invoice_theme', "Modern Minimalist (Clean Slate)")
 
-# --- TEXT WATERMARK CANVAS CALLBACK ("NEXUS EVENTS") ---
+# --- TEXT WATERMARK CANVAS CALLBACK ("NEXUS EVENTS" OR CUSTOM) ---
 def draw_watermark(canvas, doc):
     try:
         canvas.saveState()
@@ -144,15 +150,16 @@ def draw_watermark(canvas, doc):
         canvas.setFillColor(colors.HexColor("#0F172A"), alpha=0.08)
         page_width, page_height = letter
         
+        watermark_text = get_setting('company_name', DEFAULT_SETTINGS['company_name']).upper()
         canvas.translate(page_width / 2.0, page_height / 2.0)
         canvas.rotate(30)
-        canvas.drawCentredString(0, 0, "NEXUS EVENTS")
+        canvas.drawCentredString(0, 0, watermark_text)
         canvas.restoreState()
     except Exception:
         pass
 
 # --- PROFESSIONAL PDF GENERATOR ENGINE ---
-def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, items, subtotal, tax_amt, grand_total, is_duplicate=False, theme="Modern Minimalist (Clean Slate)"):
+def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, items, subtotal, tax_amt, grand_total, is_duplicate=False, theme="Modern Minimalist (Clean Slate)", is_non_tax=False):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
     story = []
@@ -186,6 +193,21 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
 
     ACCENT_RED = colors.HexColor("#DC2626")
 
+    comp_name_str = get_setting('company_name', DEFAULT_SETTINGS['company_name'])
+    comp_sub_str = get_setting('company_sub', DEFAULT_SETTINGS['company_sub'])
+    comp_addr_str = get_setting('company_addr', DEFAULT_SETTINGS['company_addr'])
+    comp_state_str = get_setting('company_state', DEFAULT_SETTINGS['company_state'])
+    comp_phone_str = get_setting('company_phone', DEFAULT_SETTINGS['company_phone'])
+    comp_email_str = get_setting('company_email', DEFAULT_SETTINGS['company_email'])
+    comp_gstin_str = get_setting('company_gstin', DEFAULT_SETTINGS['company_gstin'])
+
+    bank_name_str = get_setting('bank_name', DEFAULT_SETTINGS['bank_name'])
+    acc_holder_str = get_setting('account_holder', DEFAULT_SETTINGS['account_holder'])
+    acc_num_str = get_setting('account_number', DEFAULT_SETTINGS['account_number'])
+    ifsc_str = get_setting('ifsc_code', DEFAULT_SETTINGS['ifsc_code'])
+    upi_str = get_setting('upi_id', DEFAULT_SETTINGS['upi_id'])
+    terms_str = get_setting('terms_conditions', DEFAULT_SETTINGS['terms_conditions'])
+
     comp_title_style = ParagraphStyle('CompTitle', parent=styles['Heading1'], fontSize=16, leading=18, textColor=PRIMARY, fontName="Helvetica-Bold")
     comp_sub_style = ParagraphStyle('CompSub', parent=styles['Normal'], fontSize=8.5, leading=11, textColor=SECONDARY)
     doc_type_style = ParagraphStyle('DocType', parent=styles['Heading1'], fontSize=18, leading=20, textColor=SECONDARY, alignment=2, fontName="Helvetica-Bold")
@@ -212,15 +234,16 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
         Spacer(1, 4),
         Paragraph(f"<b>Document No:</b> {doc_num}", ParagraphStyle('M1', parent=meta_label, alignment=2)),
         Paragraph(f"<b>Date:</b> {doc_date}", ParagraphStyle('M2', parent=meta_label, alignment=2)),
-        Paragraph(f"<b>Place of Supply:</b> {client_state if client_state else COMPANY_STATE}", ParagraphStyle('M3', parent=meta_label, alignment=2))
+        Paragraph(f"<b>Place of Supply:</b> {client_state if client_state else comp_state_str}", ParagraphStyle('M3', parent=meta_label, alignment=2))
     ]
 
+    company_gstin_line = f"<b>GSTIN:</b> {comp_gstin_str}" if not is_non_tax else "<b>Non-Tax Invoice (Bill of Supply / Receipt)</b>"
     company_info_p = [
-        Paragraph(COMPANY_NAME, comp_title_style),
-        Paragraph(f"<b>{COMPANY_SUB}</b>", comp_sub_style),
-        Paragraph(COMPANY_ADDR, comp_sub_style),
-        Paragraph(f"Phone: {COMPANY_PHONE} | Email: {COMPANY_EMAIL}", comp_sub_style),
-        Paragraph(f"<b>GSTIN:</b> {COMPANY_GSTIN}", comp_sub_style)
+        Paragraph(comp_name_str, comp_title_style),
+        Paragraph(f"<b>{comp_sub_str}</b>", comp_sub_style),
+        Paragraph(comp_addr_str, comp_sub_style),
+        Paragraph(f"Phone: {comp_phone_str} | Email: {comp_email_str}", comp_sub_style),
+        Paragraph(company_gstin_line, comp_sub_style)
     ]
 
     left_header_content = [logo_container, Spacer(1, 4), company_info_p] if logo_container else company_info_p
@@ -236,23 +259,31 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
     story.append(HRFlowable(width="100%", thickness=1.5, color=PRIMARY, spaceBefore=2, spaceAfter=8))
 
     c_state_str = client_state if client_state else "Karnataka"
-    is_intra_state = (c_state_str.strip().lower() == COMPANY_STATE.lower())
+    is_intra_state = (c_state_str.strip().lower() == comp_state_str.lower())
 
     client_p = [
         Paragraph("<b>BILLED TO:</b>", ParagraphStyle('BTo', parent=styles['Normal'], fontSize=9, textColor=PRIMARY, fontName="Helvetica-Bold")),
         Paragraph(f"<b>{client_name}</b>", ParagraphStyle('CName', parent=styles['Normal'], fontSize=10, textColor=TEXT_DARK, fontName="Helvetica-Bold")),
         Paragraph(f"Contact: {client_phone if client_phone else 'N/A'}", meta_label),
         Paragraph(f"State: {c_state_str}", meta_label),
-        Paragraph(f"<b>Client GSTIN:</b> {client_gstin if client_gstin else 'N/A'}", meta_label)
+        Paragraph(f"<b>Client GSTIN:</b> {client_gstin if client_gstin and not is_non_tax else 'N/A'}", meta_label)
     ]
     
-    tax_type_str = "Intra-State GST (CGST + SGST)" if is_intra_state else "Inter-State GST (IGST)"
-    gst_info_p = [
-        Paragraph("<b>TAX REGIME & DETAILS:</b>", ParagraphStyle('TReg', parent=styles['Normal'], fontSize=9, textColor=PRIMARY, fontName="Helvetica-Bold")),
-        Paragraph(f"Tax Treatment: <b>{tax_type_str}</b>", meta_label),
-        Paragraph(f"Supplier GSTIN: <b>{COMPANY_GSTIN}</b>", meta_label),
-        Paragraph(f"Status: <b>Active Record</b>", meta_label)
-    ]
+    if not is_non_tax:
+        tax_type_str = "Intra-State GST (CGST + SGST)" if is_intra_state else "Inter-State GST (IGST)"
+        gst_info_p = [
+            Paragraph("<b>TAX REGIME & DETAILS:</b>", ParagraphStyle('TReg', parent=styles['Normal'], fontSize=9, textColor=PRIMARY, fontName="Helvetica-Bold")),
+            Paragraph(f"Tax Treatment: <b>{tax_type_str}</b>", meta_label),
+            Paragraph(f"Supplier GSTIN: <b>{comp_gstin_str}</b>", meta_label),
+            Paragraph(f"Status: <b>Active Record</b>", meta_label)
+        ]
+    else:
+        gst_info_p = [
+            Paragraph("<b>INVOICE DETAILS:</b>", ParagraphStyle('TReg', parent=styles['Normal'], fontSize=9, textColor=PRIMARY, fontName="Helvetica-Bold")),
+            Paragraph("Tax Type: <b>Non-Tax / Composition / Bill of Supply</b>", meta_label),
+            Paragraph(f"Supplier Status: <b>Unregistered / Non-Taxable Service</b>", meta_label),
+            Paragraph(f"Status: <b>Active Record</b>", meta_label)
+        ]
 
     client_table = Table([[client_p, gst_info_p]], colWidths=[310, 230])
     client_table.setStyle(TableStyle([
@@ -264,7 +295,14 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
     story.append(client_table)
     story.append(Spacer(1, 10))
 
-    if is_intra_state:
+    if is_non_tax:
+        table_data = [[
+            Paragraph("#", table_hdr), Paragraph("Item / Service Description", table_hdr),
+            Paragraph("Qty", table_hdr), Paragraph("Rate (Rs.)", table_hdr),
+            Paragraph("Total Amount (Rs.)", table_hdr)
+        ]]
+        col_w = [30, 260, 50, 90, 110]
+    elif is_intra_state:
         table_data = [[
             Paragraph("#", table_hdr), Paragraph("Item / Service Description", table_hdr),
             Paragraph("Qty", table_hdr), Paragraph("Rate (Rs.)", table_hdr),
@@ -283,25 +321,32 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
 
     for idx, item in enumerate(items, start=1):
         line_sub = item['qty'] * item['rate']
-        line_tax = line_sub * (item['tax_rate'] / 100)
-        line_total = line_sub + line_tax
-
-        if is_intra_state:
-            half_tax_pct = item['tax_rate'] / 2
+        if is_non_tax:
+            line_total = line_sub
             table_data.append([
                 Paragraph(str(idx), table_cell), Paragraph(item['desc'], table_cell),
                 Paragraph(str(item['qty']), table_cell_r), Paragraph(f"Rs. {item['rate']:,.2f}", table_cell_r),
-                Paragraph(f"Rs. {line_sub:,.2f}", table_cell_r),
-                Paragraph(f"{half_tax_pct:.1f}%", table_cell_r), Paragraph(f"{half_tax_pct:.1f}%", table_cell_r),
                 Paragraph(f"Rs. {line_total:,.2f}", table_cell_r)
             ])
         else:
-            table_data.append([
-                Paragraph(str(idx), table_cell), Paragraph(item['desc'], table_cell),
-                Paragraph(str(item['qty']), table_cell_r), Paragraph(f"Rs. {item['rate']:,.2f}", table_cell_r),
-                Paragraph(f"Rs. {line_sub:,.2f}", table_cell_r),
-                Paragraph(f"{item['tax_rate']}%", table_cell_r), Paragraph(f"Rs. {line_total:,.2f}", table_cell_r)
-            ])
+            line_tax = line_sub * (item['tax_rate'] / 100)
+            line_total = line_sub + line_tax
+            if is_intra_state:
+                half_tax_pct = item['tax_rate'] / 2
+                table_data.append([
+                    Paragraph(str(idx), table_cell), Paragraph(item['desc'], table_cell),
+                    Paragraph(str(item['qty']), table_cell_r), Paragraph(f"Rs. {item['rate']:,.2f}", table_cell_r),
+                    Paragraph(f"Rs. {line_sub:,.2f}", table_cell_r),
+                    Paragraph(f"{half_tax_pct:.1f}%", table_cell_r), Paragraph(f"{half_tax_pct:.1f}%", table_cell_r),
+                    Paragraph(f"Rs. {line_total:,.2f}", table_cell_r)
+                ])
+            else:
+                table_data.append([
+                    Paragraph(str(idx), table_cell), Paragraph(item['desc'], table_cell),
+                    Paragraph(str(item['qty']), table_cell_r), Paragraph(f"Rs. {item['rate']:,.2f}", table_cell_r),
+                    Paragraph(f"Rs. {line_sub:,.2f}", table_cell_r),
+                    Paragraph(f"{item['tax_rate']}%", table_cell_r), Paragraph(f"Rs. {line_total:,.2f}", table_cell_r)
+                ])
 
     item_table = Table(table_data, colWidths=col_w)
     item_table.setStyle(TableStyle([
@@ -313,15 +358,17 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
     story.append(item_table)
     story.append(Spacer(1, 10))
 
-    summary_rows = [["Subtotal:", f"Rs. {subtotal:,.2f}"]]
-    if is_intra_state:
-        half_tax = tax_amt / 2
-        summary_rows.append(["CGST (Central Tax):", f"Rs. {half_tax:,.2f}"])
-        summary_rows.append(["SGST (State Tax):", f"Rs. {half_tax:,.2f}"])
+    if is_non_tax:
+        summary_rows = [["Grand Total:", f"Rs. {grand_total:,.2f}"]]
     else:
-        summary_rows.append(["IGST (Integrated Tax):", f"Rs. {tax_amt:,.2f}"])
-
-    summary_rows.append(["Grand Total:", f"Rs. {grand_total:,.2f}"])
+        summary_rows = [["Subtotal:", f"Rs. {subtotal:,.2f}"]]
+        if is_intra_state:
+            half_tax = tax_amt / 2
+            summary_rows.append(["CGST (Central Tax):", f"Rs. {half_tax:,.2f}"])
+            summary_rows.append(["SGST (State Tax):", f"Rs. {half_tax:,.2f}"])
+        else:
+            summary_rows.append(["IGST (Integrated Tax):", f"Rs. {tax_amt:,.2f}"])
+        summary_rows.append(["Grand Total:", f"Rs. {grand_total:,.2f}"])
 
     summary_table_data = []
     for r in summary_rows:
@@ -340,9 +387,9 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
     story.append(Spacer(1, 12))
 
     bank_text = (
-        f"<b>Account Holder:</b> {ACCOUNT_HOLDER}<br/>"
-        f"<b>Bank:</b> {BANK_NAME} | <b>Account No:</b> {ACCOUNT_NUMBER}<br/>"
-        f"<b>IFSC:</b> {IFSC_CODE} | <b>UPI ID:</b> {UPI_ID}"
+        f"<b>Account Holder:</b> {acc_holder_str}<br/>"
+        f"<b>Bank:</b> {bank_name_str} | <b>Account No:</b> {acc_num_str}<br/>"
+        f"<b>IFSC:</b> {ifsc_str} | <b>UPI ID:</b> {upi_str}"
     )
 
     pay_p = [
@@ -350,9 +397,10 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
         Spacer(1, 2), Paragraph(bank_text, meta_label)
     ]
     
+    formatted_terms = terms_str.replace('\n', '<br/>')
     terms_p = [
         Paragraph("<b>TERMS & CONDITIONS:</b>", ParagraphStyle('THead', parent=styles['Normal'], fontSize=8.5, textColor=PRIMARY, fontName="Helvetica-Bold")),
-        Spacer(1, 2), Paragraph("1. Payment due within 15 days of invoice date.<br/>2. Quote invoice # on payment.<br/>3. Subject to Bangalore jurisdiction.", meta_label)
+        Spacer(1, 2), Paragraph(formatted_terms, meta_label)
     ]
 
     footer_table = Table([[pay_p, terms_p]], colWidths=[280, 260])
@@ -368,8 +416,8 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
     buffer.seek(0)
     return buffer
 
-# --- HTML PREVIEW RENDERER ("NEXUS EVENTS" TEXT WATERMARK) ---
-def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, items, subtotal, tax_amt, grand_total, is_duplicate=False, theme="Modern Minimalist (Clean Slate)"):
+# --- HTML PREVIEW RENDERER ---
+def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, items, subtotal, tax_amt, grand_total, is_duplicate=False, theme="Modern Minimalist (Clean Slate)", is_non_tax=False):
     if theme == "Executive Dark (Bold & Corporate)":
         primary_color = "#111827"
         secondary_color = "#4B5563"
@@ -391,86 +439,133 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
         accent_bg = "#F8FAFC"
         border_clr = "#E2E8F0"
 
+    comp_name_str = get_setting('company_name', DEFAULT_SETTINGS['company_name'])
+    comp_sub_str = get_setting('company_sub', DEFAULT_SETTINGS['company_sub'])
+    comp_addr_str = get_setting('company_addr', DEFAULT_SETTINGS['company_addr'])
+    comp_state_str = get_setting('company_state', DEFAULT_SETTINGS['company_state'])
+    comp_phone_str = get_setting('company_phone', DEFAULT_SETTINGS['company_phone'])
+    comp_email_str = get_setting('company_email', DEFAULT_SETTINGS['company_email'])
+    comp_gstin_str = get_setting('company_gstin', DEFAULT_SETTINGS['company_gstin'])
+
+    bank_name_str = get_setting('bank_name', DEFAULT_SETTINGS['bank_name'])
+    acc_holder_str = get_setting('account_holder', DEFAULT_SETTINGS['account_holder'])
+    acc_num_str = get_setting('account_number', DEFAULT_SETTINGS['account_number'])
+    ifsc_str = get_setting('ifsc_code', DEFAULT_SETTINGS['ifsc_code'])
+    upi_str = get_setting('upi_id', DEFAULT_SETTINGS['upi_id'])
+    terms_str = get_setting('terms_conditions', DEFAULT_SETTINGS['terms_conditions'])
+
     c_state_str = client_state if client_state else "Karnataka"
-    is_intra_state = (c_state_str.strip().lower() == COMPANY_STATE.lower())
+    is_intra_state = (c_state_str.strip().lower() == comp_state_str.lower())
     
     dup_banner = f"<div style='color: #DC2626; font-weight: bold; font-size: 16px; margin-bottom: 5px;'>*** DUPLICATE COPY ***</div>" if is_duplicate else ""
     
-    # Text watermark overlay HTML
     text_watermark_html = f"""
     <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); opacity: 0.08; z-index: 10; pointer-events: none; font-size: 55px; font-weight: bold; color: {primary_color}; white-space: nowrap; font-family: Helvetica, Arial, sans-serif;">
-        NEXUS EVENTS
+        {comp_name_str.upper()}
     </div>
     """
 
     items_html = ""
     for idx, item in enumerate(items, start=1):
         line_sub = item['qty'] * item['rate']
-        line_tax = line_sub * (item['tax_rate'] / 100)
-        line_total = line_sub + line_tax
-        
-        if is_intra_state:
-            half_tax = item['tax_rate'] / 2
+        if is_non_tax:
+            line_total = line_sub
             items_html += f"""
                 <tr>
                     <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: center;">{idx}</td>
                     <td style="padding: 8px; border-bottom: 1px solid {border_clr};">{item['desc']}</td>
                     <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">{item['qty']}</td>
                     <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">Rs. {item['rate']:,.2f}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">Rs. {line_sub:,.2f}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">{half_tax:.1f}%</td>
-                    <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">{half_tax:.1f}%</td>
                     <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">Rs. {line_total:,.2f}</td>
                 </tr>
             """
         else:
-            items_html += f"""
-                <tr>
-                    <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: center;">{idx}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid {border_clr};">{item['desc']}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">{item['qty']}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">Rs. {item['rate']:,.2f}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">Rs. {line_sub:,.2f}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">{item['tax_rate']}%</td>
-                    <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">Rs. {line_total:,.2f}</td>
-                </tr>
-            """
+            line_tax = line_sub * (item['tax_rate'] / 100)
+            line_total = line_sub + line_tax
+            if is_intra_state:
+                half_tax = item['tax_rate'] / 2
+                items_html += f"""
+                    <tr>
+                        <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: center;">{idx}</td>
+                        <td style="padding: 8px; border-bottom: 1px solid {border_clr};">{item['desc']}</td>
+                        <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">{item['qty']}</td>
+                        <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">Rs. {item['rate']:,.2f}</td>
+                        <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">Rs. {line_sub:,.2f}</td>
+                        <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">{half_tax:.1f}%</td>
+                        <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">{half_tax:.1f}%</td>
+                        <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">Rs. {line_total:,.2f}</td>
+                    </tr>
+                """
+            else:
+                items_html += f"""
+                    <tr>
+                        <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: center;">{idx}</td>
+                        <td style="padding: 8px; border-bottom: 1px solid {border_clr};">{item['desc']}</td>
+                        <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">{item['qty']}</td>
+                        <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">Rs. {item['rate']:,.2f}</td>
+                        <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">Rs. {line_sub:,.2f}</td>
+                        <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">{item['tax_rate']}%</td>
+                        <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">Rs. {line_total:,.2f}</td>
+                    </tr>
+                """
 
-    tax_summary_html = f"<tr><td style='padding: 6px; text-align: right;'>Subtotal:</td><td style='padding: 6px; text-align: right;'>Rs. {subtotal:,.2f}</td></tr>"
-    if is_intra_state:
-        half_tax_tot = tax_amt / 2
-        tax_summary_html += f"""
-            <tr><td style='padding: 6px; text-align: right;'>CGST (Central Tax):</td><td style='padding: 6px; text-align: right;'>Rs. {half_tax_tot:,.2f}</td></tr>
-            <tr><td style='padding: 6px; text-align: right;'>SGST (State Tax):</td><td style='padding: 6px; text-align: right;'>Rs. {half_tax_tot:,.2f}</td></tr>
+    if is_non_tax:
+        tax_summary_html = f"""
+            <tr style='border-top: 2px solid {primary_color}; font-weight: bold; font-size: 14px; color: {primary_color};'>
+                <td style='padding: 8px; text-align: right;'>Grand Total:</td>
+                <td style='padding: 8px; text-align: right;'>Rs. {grand_total:,.2f}</td>
+            </tr>
         """
     else:
-        tax_summary_html += f"<tr><td style='padding: 6px; text-align: right;'>IGST (Integrated Tax):</td><td style='padding: 6px; text-align: right;'>Rs. {tax_amt:,.2f}</td></tr>"
-    
-    tax_summary_html += f"""
-        <tr style='border-top: 2px solid {primary_color}; font-weight: bold; font-size: 14px; color: {primary_color};'>
-            <td style='padding: 8px; text-align: right;'>Grand Total:</td>
-            <td style='padding: 8px; text-align: right;'>Rs. {grand_total:,.2f}</td>
-        </tr>
-    """
+        tax_summary_html = f"<tr><td style='padding: 6px; text-align: right;'>Subtotal:</td><td style='padding: 6px; text-align: right;'>Rs. {subtotal:,.2f}</td></tr>"
+        if is_intra_state:
+            half_tax_tot = tax_amt / 2
+            tax_summary_html += f"""
+                <tr><td style='padding: 6px; text-align: right;'>CGST (Central Tax):</td><td style='padding: 6px; text-align: right;'>Rs. {half_tax_tot:,.2f}</td></tr>
+                <tr><td style='padding: 6px; text-align: right;'>SGST (State Tax):</td><td style='padding: 6px; text-align: right;'>Rs. {half_tax_tot:,.2f}</td></tr>
+            """
+        else:
+            tax_summary_html += f"<tr><td style='padding: 6px; text-align: right;'>IGST (Integrated Tax):</td><td style='padding: 6px; text-align: right;'>Rs. {tax_amt:,.2f}</td></tr>"
+        
+        tax_summary_html += f"""
+            <tr style='border-top: 2px solid {primary_color}; font-weight: bold; font-size: 14px; color: {primary_color};'>
+                <td style='padding: 8px; text-align: right;'>Grand Total:</td>
+                <td style='padding: 8px; text-align: right;'>Rs. {grand_total:,.2f}</td>
+            </tr>
+        """
 
-    header_headers = f"""
-        <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: center;">#</th>
-        <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: left;">Item / Service Description</th>
-        <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Qty</th>
-        <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Rate (Rs.)</th>
-        <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Amount (Rs.)</th>
-        <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">CGST</th>
-        <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">SGST</th>
-        <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Total (Rs.)</th>
-    """ if is_intra_state else f"""
-        <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: center;">#</th>
-        <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: left;">Item / Service Description</th>
-        <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Qty</th>
-        <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Rate (Rs.)</th>
-        <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Amount (Rs.)</th>
-        <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">IGST</th>
-        <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Total (Rs.)</th>
-    """
+    if is_non_tax:
+        header_headers = f"""
+            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: center;">#</th>
+            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: left;">Item / Service Description</th>
+            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Qty</th>
+            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Rate (Rs.)</th>
+            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Total Amount (Rs.)</th>
+        """
+    else:
+        header_headers = f"""
+            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: center;">#</th>
+            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: left;">Item / Service Description</th>
+            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Qty</th>
+            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Rate (Rs.)</th>
+            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Amount (Rs.)</th>
+            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">CGST</th>
+            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">SGST</th>
+            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Total (Rs.)</th>
+        """ if is_intra_state else f"""
+            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: center;">#</th>
+            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: left;">Item / Service Description</th>
+            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Qty</th>
+            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Rate (Rs.)</th>
+            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Amount (Rs.)</th>
+            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">IGST</th>
+            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Total (Rs.)</th>
+        """
+
+    company_gstin_display = f"<b>GSTIN:</b> {comp_gstin_str}" if not is_non_tax else "<b>Non-Tax Invoice / Bill of Supply</b>"
+    tax_treatment_display = f"Tax Treatment: <b>{'Intra-State GST (CGST + SGST)' if is_intra_state else 'Inter-State GST (IGST)'}</b>" if not is_non_tax else "Tax Treatment: <b>Non-Taxable / Unregistered</b>"
+
+    formatted_terms_html = terms_str.replace('\n', '<br/>')
 
     html_content = f"""
     <div style="position: relative; background-color: #ffffff; color: #1E293B; padding: 30px; font-family: Helvetica, Arial, sans-serif; border: 1px solid {border_clr}; border-radius: 6px; max-width: 800px; margin: auto; overflow: hidden;">
@@ -481,11 +576,11 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
         <table style="width: 100%; border-collapse: collapse; position: relative; z-index: 1;">
             <tr>
                 <td style="vertical-align: top; width: 55%;">
-                    <div style="font-size: 18px; font-weight: bold; color: {primary_color};">{COMPANY_NAME}</div>
-                    <div style="font-size: 11px; font-weight: bold; color: {secondary_color}; margin-top: 2px;">{COMPANY_SUB}</div>
-                    <div style="font-size: 11px; color: #475569; margin-top: 2px;">{COMPANY_ADDR}</div>
-                    <div style="font-size: 11px; color: #475569;">Phone: {COMPANY_PHONE} | Email: {COMPANY_EMAIL}</div>
-                    <div style="font-size: 11px; color: #475569; margin-top: 2px;"><b>GSTIN:</b> {COMPANY_GSTIN}</div>
+                    <div style="font-size: 18px; font-weight: bold; color: {primary_color};">{comp_name_str}</div>
+                    <div style="font-size: 11px; font-weight: bold; color: {secondary_color}; margin-top: 2px;">{comp_sub_str}</div>
+                    <div style="font-size: 11px; color: #475569; margin-top: 2px;">{comp_addr_str}</div>
+                    <div style="font-size: 11px; color: #475569;">Phone: {comp_phone_str} | Email: {comp_email_str}</div>
+                    <div style="font-size: 11px; color: #475569; margin-top: 2px;">{company_gstin_display}</div>
                 </td>
                 <td style="vertical-align: top; text-align: right; width: 45%;">
                     {dup_banner}
@@ -506,12 +601,12 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
                     <div style="font-size: 12px; font-weight: bold; color: #0F172A;">{client_name}</div>
                     <div style="font-size: 11px; color: #475569;">Contact: {client_phone if client_phone else 'N/A'}</div>
                     <div style="font-size: 11px; color: #475569;">State: {c_state_str}</div>
-                    <div style="font-size: 11px; color: #475569;"><b>Client GSTIN:</b> {client_gstin if client_gstin else 'N/A'}</div>
+                    <div style="font-size: 11px; color: #475569;"><b>Client GSTIN:</b> {client_gstin if client_gstin and not is_non_tax else 'N/A'}</div>
                 </td>
                 <td style="padding: 12px; vertical-align: top; width: 50%; border-left: 0.5px solid {border_clr};">
-                    <div style="font-size: 11px; font-weight: bold; color: {primary_color}; margin-bottom: 4px;">TAX REGIME & DETAILS:</div>
-                    <div style="font-size: 11px; color: #475569;">Tax Treatment: <b>{"Intra-State GST (CGST + SGST)" if is_intra_state else "Inter-State GST (IGST)"}</b></div>
-                    <div style="font-size: 11px; color: #475569; margin-top: 2px;">Supplier GSTIN: <b>{COMPANY_GSTIN}</b></div>
+                    <div style="font-size: 11px; font-weight: bold; color: {primary_color}; margin-bottom: 4px;">INVOICE REGIME & DETAILS:</div>
+                    <div style="font-size: 11px; color: #475569;">{tax_treatment_display}</div>
+                    <div style="font-size: 11px; color: #475569; margin-top: 2px;">Supplier Status: <b>Active Record</b></div>
                 </td>
             </tr>
         </table>
@@ -539,17 +634,15 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
                 <td style="padding: 10px; vertical-align: top; width: 50%;">
                     <div style="font-size: 10px; font-weight: bold; color: {primary_color}; margin-bottom: 3px;">PAYMENT / REMITTANCE DETAILS:</div>
                     <div style="font-size: 10px; color: #475569; line-height: 1.4;">
-                        <b>Account Holder:</b> {ACCOUNT_HOLDER}<br/>
-                        <b>Bank:</b> {BANK_NAME} | <b>Account No:</b> {ACCOUNT_NUMBER}<br/>
-                        <b>IFSC:</b> {IFSC_CODE} | <b>UPI ID:</b> {UPI_ID}
+                        <b>Account Holder:</b> {acc_holder_str}<br/>
+                        <b>Bank:</b> {bank_name_str} | <b>Account No:</b> {acc_num_str}<br/>
+                        <b>IFSC:</b> {ifsc_str} | <b>UPI ID:</b> {upi_str}
                     </div>
                 </td>
                 <td style="padding: 10px; vertical-align: top; width: 50%; border-left: 0.5px solid {border_clr};">
                     <div style="font-size: 10px; font-weight: bold; color: {primary_color}; margin-bottom: 3px;">TERMS & CONDITIONS:</div>
                     <div style="font-size: 10px; color: #475569; line-height: 1.4;">
-                        1. Payment due within 15 days of invoice date.<br/>
-                        2. Quote invoice # on payment.<br/>
-                        3. Subject to Bangalore jurisdiction.
+                        {formatted_terms_html}
                     </div>
                 </td>
             </tr>
@@ -561,7 +654,7 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
 # --- STREAMLIT APP NAVIGATION ---
 st.title("🧾 Nexus Billing & Operations Suite")
 
-choice = st.radio("Navigation Menu", ["Create Document", "Document History & Management", "Client Directory", "Recycle Bin"], horizontal=True)
+choice = st.radio("Navigation Menu", ["Create Document", "Document History & Management", "Client Directory", "Company & Invoice Settings", "Recycle Bin"], horizontal=True)
 
 st.sidebar.divider()
 st.sidebar.subheader("🎨 Invoice Design & Branding")
@@ -584,14 +677,20 @@ if uploaded_logo is not None:
 if choice == "Create Document":
     st.header("📝 Create Billing Document")
     
-    col_a, col_b, col_c = st.columns(3)
+    col_a, col_b, col_c, col_d = st.columns(4)
     with col_a:
-        doc_type = st.selectbox("Document Type", ["Tax Invoice", "Estimate / Quotation", "Proforma Invoice"])
+        doc_type = st.selectbox("Document Type", ["Tax Invoice", "Non-Tax Invoice / Bill of Supply", "Estimate / Quotation", "Proforma Invoice"])
     with col_b:
-        doc_prefix = "INV" if doc_type == "Tax Invoice" else ("EST" if "Estimate" in doc_type else "PRO")
+        is_non_tax = ("Non-Tax" in doc_type)
+        doc_prefix = "NONTX" if is_non_tax else ("INV" if doc_type == "Tax Invoice" else ("EST" if "Estimate" in doc_type else "PRO"))
         doc_num = st.text_input("Document #", f"{doc_prefix}-{date.today().strftime('%Y%m%d')}-01")
     with col_c:
         doc_date = st.date_input("Date", date.today())
+    with col_d:
+        st.write("")
+        st.write("")
+        if is_non_tax:
+            st.info("ℹ️ Non-Tax Mode active (GST disabled for items).")
 
     st.subheader("Client Information")
     clients_db = cursor.execute("SELECT name, phone, state, tax_id FROM clients").fetchall()
@@ -620,15 +719,25 @@ if choice == "Create Document":
 
     with st.form("add_item_form", clear_on_submit=True):
         st.write("Add multiple line items one by one below:")
-        f_col1, f_col2, f_col3, f_col4 = st.columns([3, 1, 1, 1])
-        with f_col1:
-            item_desc = st.text_input("Item Description / Service Name")
-        with f_col2:
-            item_qty = st.number_input("Qty / Days", min_value=1, value=1)
-        with f_col3:
-            item_rate = st.number_input("Rate (₹)", min_value=0.0, step=500.0)
-        with f_col4:
-            item_tax = st.number_input("GST Tax %", min_value=0.0, value=18.0)
+        if is_non_tax:
+            f_col1, f_col2, f_col3 = st.columns([3, 1, 1])
+            with f_col1:
+                item_desc = st.text_input("Item Description / Service Name")
+            with f_col2:
+                item_qty = st.number_input("Qty / Days", min_value=1, value=1)
+            with f_col3:
+                item_rate = st.number_input("Rate (₹)", min_value=0.0, step=500.0)
+            item_tax = 0.0
+        else:
+            f_col1, f_col2, f_col3, f_col4 = st.columns([3, 1, 1, 1])
+            with f_col1:
+                item_desc = st.text_input("Item Description / Service Name")
+            with f_col2:
+                item_qty = st.number_input("Qty / Days", min_value=1, value=1)
+            with f_col3:
+                item_rate = st.number_input("Rate (₹)", min_value=0.0, step=500.0)
+            with f_col4:
+                item_tax = st.number_input("GST Tax %", min_value=0.0, value=18.0)
         
         add_item_btn = st.form_submit_button("+ Add Line Item")
         if add_item_btn and item_desc:
@@ -647,7 +756,10 @@ if choice == "Create Document":
             line_sub = item['qty'] * item['rate']
             cols = st.columns([4, 1])
             with cols[0]:
-                st.write(f"**{idx+1}. {item['desc']}** | Qty: {item['qty']} × ₹{item['rate']:,.2f} = **₹{line_sub:,.2f}** | Tax: {item['tax_rate']}%")
+                if is_non_tax:
+                    st.write(f"**{idx+1}. {item['desc']}** | Qty: {item['qty']} × ₹{item['rate']:,.2f} = **₹{line_sub:,.2f}** (Non-Tax)")
+                else:
+                    st.write(f"**{idx+1}. {item['desc']}** | Qty: {item['qty']} × ₹{item['rate']:,.2f} = **₹{line_sub:,.2f}** | Tax: {item['tax_rate']}%")
             with cols[1]:
                 if st.button("🗑️ Remove", key=f"remove_item_{idx}"):
                     st.session_state.item_list.pop(idx)
@@ -658,7 +770,7 @@ if choice == "Create Document":
             st.rerun()
 
     subtotal = sum(i['qty'] * i['rate'] for i in st.session_state.item_list)
-    tax_amt = sum((i['qty'] * i['rate']) * (i['tax_rate'] / 100) for i in st.session_state.item_list)
+    tax_amt = 0.0 if is_non_tax else sum((i['qty'] * i['rate']) * (i['tax_rate'] / 100) for i in st.session_state.item_list)
     grand_total = subtotal + tax_amt
 
     st.divider()
@@ -668,7 +780,7 @@ if choice == "Create Document":
         preview_html = render_html_preview(
             doc_type, doc_num, client_name, client_phone, client_gstin, client_state, 
             str(doc_date), st.session_state.item_list, subtotal, tax_amt, grand_total, 
-            is_duplicate=False, theme=selected_theme
+            is_duplicate=False, theme=selected_theme, is_non_tax=is_non_tax
         )
         st.components.v1.html(preview_html, height=750, scrolling=True)
 
@@ -677,7 +789,7 @@ if choice == "Create Document":
             pdf_buffer = generate_pdf(
                 doc_type, doc_num, client_name, client_phone, client_gstin, client_state, 
                 str(doc_date), st.session_state.item_list, subtotal, tax_amt, grand_total, 
-                is_duplicate=False, theme=selected_theme
+                is_duplicate=False, theme=selected_theme, is_non_tax=is_non_tax
             )
             st.download_button(
                 label="📥 Download Original PDF",
@@ -689,7 +801,7 @@ if choice == "Create Document":
             pdf_dup_buffer = generate_pdf(
                 doc_type, doc_num, client_name, client_phone, client_gstin, client_state, 
                 str(doc_date), st.session_state.item_list, subtotal, tax_amt, grand_total, 
-                is_duplicate=True, theme=selected_theme
+                is_duplicate=True, theme=selected_theme, is_non_tax=is_non_tax
             )
             st.download_button(
                 label="📥 Download Duplicate Copy PDF",
@@ -726,18 +838,19 @@ elif choice == "Document History & Management":
             if row:
                 d_type, d_num, c_name, c_phone, c_gstin, c_state, d_date, sub, tax, g_tot, status, i_json = row
                 items = json.loads(i_json)
+                is_non_tax_doc = ("Non-Tax" in d_type)
                 
                 st.write(f"### Managing: {d_num} ({c_name})")
                 
                 preview_html = render_html_preview(
-                    d_type, d_num, c_name, c_phone, c_gstin, c_state, d_date, items, sub, tax, g_tot, is_duplicate=False, theme=selected_theme
+                    d_type, d_num, c_name, c_phone, c_gstin, c_state, d_date, items, sub, tax, g_tot, is_duplicate=False, theme=selected_theme, is_non_tax=is_non_tax_doc
                 )
                 st.components.v1.html(preview_html, height=600, scrolling=True)
 
                 col_h1, col_h2 = st.columns(2)
                 with col_h1:
                     pdf_buf = generate_pdf(
-                        d_type, d_num, c_name, c_phone, c_gstin, c_state, d_date, items, sub, tax, g_tot, is_duplicate=False, theme=selected_theme
+                        d_type, d_num, c_name, c_phone, c_gstin, c_state, d_date, items, sub, tax, g_tot, is_duplicate=False, theme=selected_theme, is_non_tax=is_non_tax_doc
                     )
                     st.download_button("📥 Download PDF", data=pdf_buf, file_name=f"{d_num}.pdf", mime="application/pdf", key=f"dl_{selected_doc_id}")
                 with col_h2:
@@ -782,7 +895,55 @@ elif choice == "Client Directory":
     else:
         st.info("No client records found.")
 
-# --- 4. RECYCLE BIN ---
+# --- 4. COMPANY & INVOICE SETTINGS ---
+elif choice == "Company & Invoice Settings":
+    st.header("⚙️ Company & Invoice Customization Settings")
+    st.write("Update your company profile, business details, bank remittance information, and default terms & conditions below. All changes will apply to future PDF exports and live previews.")
+
+    with st.form("company_settings_form"):
+        st.subheader("🏢 Company Information")
+        col_s1, col_s2 = st.columns(2)
+        with col_s1:
+            cfg_name = st.text_input("Company Name", value=get_setting('company_name', DEFAULT_SETTINGS['company_name']))
+            cfg_sub = st.text_input("Company Tagline / Subtitle", value=get_setting('company_sub', DEFAULT_SETTINGS['company_sub']))
+            cfg_addr = st.text_input("Company Address", value=get_setting('company_addr', DEFAULT_SETTINGS['company_addr']))
+        with col_s2:
+            cfg_state = st.text_input("Company State", value=get_setting('company_state', DEFAULT_SETTINGS['company_state']))
+            cfg_phone = st.text_input("Phone Number", value=get_setting('company_phone', DEFAULT_SETTINGS['company_phone']))
+            cfg_email = st.text_input("Email Address", value=get_setting('company_email', DEFAULT_SETTINGS['company_email']))
+            cfg_gstin = st.text_input("GSTIN Number", value=get_setting('company_gstin', DEFAULT_SETTINGS['company_gstin']))
+
+        st.subheader("🏦 Bank / Remittance Details")
+        col_b1, col_b2 = st.columns(2)
+        with col_b1:
+            cfg_bank = st.text_input("Bank Name", value=get_setting('bank_name', DEFAULT_SETTINGS['bank_name']))
+            cfg_holder = st.text_input("Account Holder Name", value=get_setting('account_holder', DEFAULT_SETTINGS['account_holder']))
+            cfg_accnum = st.text_input("Account Number", value=get_setting('account_number', DEFAULT_SETTINGS['account_number']))
+        with col_b2:
+            cfg_ifsc = st.text_input("IFSC Code", value=get_setting('ifsc_code', DEFAULT_SETTINGS['ifsc_code']))
+            cfg_upi = st.text_input("UPI ID", value=get_setting('upi_id', DEFAULT_SETTINGS['upi_id']))
+
+        st.subheader("📜 Terms & Conditions")
+        cfg_terms = st.text_area("Terms & Conditions (One per line)", value=get_setting('terms_conditions', DEFAULT_SETTINGS['terms_conditions']), height=100)
+
+        save_settings_btn = st.form_submit_button("💾 Save All Settings")
+        if save_settings_btn:
+            save_setting('company_name', cfg_name)
+            save_setting('company_sub', cfg_sub)
+            save_setting('company_addr', cfg_addr)
+            save_setting('company_state', cfg_state)
+            save_setting('company_phone', cfg_phone)
+            save_setting('company_email', cfg_email)
+            save_setting('company_gstin', cfg_gstin)
+            save_setting('bank_name', cfg_bank)
+            save_setting('account_holder', cfg_holder)
+            save_setting('account_number', cfg_accnum)
+            save_setting('ifsc_code', cfg_ifsc)
+            save_setting('upi_id', cfg_upi)
+            save_setting('terms_conditions', cfg_terms)
+            st.success("Company settings updated successfully! Watermarks and exports will reflect these changes immediately.")
+
+# --- 5. RECYCLE BIN ---
 elif choice == "Recycle Bin":
     st.header("🗑️ Recycle Bin (Deleted Documents)")
     del_docs = cursor.execute("SELECT bin_id, doc_num, client_name, grand_total, deleted_at FROM deleted_documents").fetchall()
