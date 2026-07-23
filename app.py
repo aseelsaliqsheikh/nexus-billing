@@ -105,7 +105,7 @@ ACCOUNT_NUMBER = "50200012345678"
 IFSC_CODE = "HDFC0001234"
 UPI_ID = "nexus@upi"
 
-# --- HELPER FUNCTIONS FOR PERSISTENT LOGO ---
+# --- HELPER FUNCTIONS FOR PERSISTENT LOGO & THEME ---
 def save_logo_to_db(uploaded_file):
     if uploaded_file is not None:
         logo_bytes = uploaded_file.getvalue()
@@ -118,22 +118,53 @@ def get_logo_from_db():
         return io.BytesIO(row[0])
     return None
 
-# --- PROFESSIONAL PDF GENERATOR ENGINE ---
-def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, items, subtotal, tax_amt, grand_total, is_duplicate=False):
+def save_theme_to_db(theme_name):
+    cursor.execute("REPLACE INTO settings (key, value) VALUES ('invoice_theme', ?)", (theme_name.encode('utf-8'),))
+    conn.commit()
+
+def get_theme_from_db():
+    row = cursor.execute("SELECT value FROM settings WHERE key = 'invoice_theme'").fetchone()
+    if row and row[0]:
+        return row[0].decode('utf-8')
+    return "Modern Minimalist (Clean Slate)"
+
+# --- PROFESSIONAL PDF GENERATOR ENGINE (WITH REDESIGNED STYLES) ---
+def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, items, subtotal, tax_amt, grand_total, is_duplicate=False, theme="Modern Minimalist (Clean Slate)"):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
     story = []
     styles = getSampleStyleSheet()
 
-    PRIMARY = colors.HexColor("#0F172A")    
-    SECONDARY = colors.HexColor("#2563EB")  
-    TEXT_DARK = colors.HexColor("#1E293B")  
-    BG_LIGHT = colors.HexColor("#F8FAFC")   
-    BORDER_CLR = colors.HexColor("#CBD5E1") 
-    ACCENT_RED = colors.HexColor("#DC2626") 
+    # Dynamic Theme Palettes
+    if theme == "Executive Dark (Bold & Corporate)":
+        PRIMARY = colors.HexColor("#111827")
+        SECONDARY = colors.HexColor("#4B5563")
+        ACCENT_BG = colors.HexColor("#F3F4F6")
+        TEXT_DARK = colors.HexColor("#1F2937")
+        BORDER_CLR = colors.HexColor("#E5E7EB")
+    elif theme == "Creative Vibrant (Blue & Slate)":
+        PRIMARY = colors.HexColor("#1E3A8A")
+        SECONDARY = colors.HexColor("#2563EB")
+        ACCENT_BG = colors.HexColor("#EFF6FF")
+        TEXT_DARK = colors.HexColor("#1E293B")
+        BORDER_CLR = colors.HexColor("#BFDBFE")
+    elif theme == "Warm Editorial (Classic & Refined)":
+        PRIMARY = colors.HexColor("#78350F")
+        SECONDARY = colors.HexColor("#D97706")
+        ACCENT_BG = colors.HexColor("#FFFBEB")
+        TEXT_DARK = colors.HexColor("#451A03")
+        BORDER_CLR = colors.HexColor("#FDE68A")
+    else:  # Modern Minimalist
+        PRIMARY = colors.HexColor("#0F172A")
+        SECONDARY = colors.HexColor("#64748B")
+        ACCENT_BG = colors.HexColor("#F8FAFC")
+        TEXT_DARK = colors.HexColor("#334155")
+        BORDER_CLR = colors.HexColor("#E2E8F0")
 
-    comp_title_style = ParagraphStyle('CompTitle', parent=styles['Heading1'], fontSize=15, leading=17, textColor=PRIMARY, fontName="Helvetica-Bold")
-    comp_sub_style = ParagraphStyle('CompSub', parent=styles['Normal'], fontSize=8.5, leading=11, textColor=TEXT_DARK)
+    ACCENT_RED = colors.HexColor("#DC2626")
+
+    comp_title_style = ParagraphStyle('CompTitle', parent=styles['Heading1'], fontSize=16, leading=18, textColor=PRIMARY, fontName="Helvetica-Bold")
+    comp_sub_style = ParagraphStyle('CompSub', parent=styles['Normal'], fontSize=8.5, leading=11, textColor=SECONDARY)
     doc_type_style = ParagraphStyle('DocType', parent=styles['Heading1'], fontSize=18, leading=20, textColor=SECONDARY, alignment=2, fontName="Helvetica-Bold")
     meta_label = ParagraphStyle('MetaLabel', parent=styles['Normal'], fontSize=8.5, leading=11, textColor=TEXT_DARK)
     table_hdr = ParagraphStyle('TblHdr', parent=styles['Normal'], fontSize=8.5, textColor=colors.white, fontName="Helvetica-Bold", alignment=1)
@@ -146,19 +177,20 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
     logo_container = None
     if logo_file:
         try:
-            logo_img = Image(logo_file, width=100, height=50)
-            logo_img.hAlign = 'CENTER'
-            
-            logo_container = Table([[logo_img]], colWidths=[110])
-            logo_container.setStyle(TableStyle([
-                ('BACKGROUND', (0,0), (-1,-1), PRIMARY),
-                ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-                ('BOTTOMPADDING', (0,0), (-1,-1), 4),
-                ('TOPPADDING', (0,0), (-1,-1), 4),
-            ]))
+            logo_img = Image(logo_file, width=90, height=45)
+            logo_img.hAlign = 'LEFT'
+            logo_container = logo_img
         except Exception:
             logo_container = None
+
+    dup_text = f"<font color='{ACCENT_RED.hexval()}'><b>*** DUPLICATE COPY ***</b></font><br/>" if is_duplicate else ""
+    meta_info_p = [
+        Paragraph(f"{dup_text}{doc_type.upper()}", doc_type_style),
+        Spacer(1, 4),
+        Paragraph(f"<b>Document No:</b> {doc_num}", ParagraphStyle('M1', parent=meta_label, alignment=2)),
+        Paragraph(f"<b>Date:</b> {doc_date}", ParagraphStyle('M2', parent=meta_label, alignment=2)),
+        Paragraph(f"<b>Place of Supply:</b> {client_state if client_state else COMPANY_STATE}", ParagraphStyle('M3', parent=meta_label, alignment=2))
+    ]
 
     company_info_p = [
         Paragraph(COMPANY_NAME, comp_title_style),
@@ -167,19 +199,10 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
         Paragraph(f"Phone: {COMPANY_PHONE} | Email: {COMPANY_EMAIL}", comp_sub_style),
         Paragraph(f"<b>GSTIN:</b> {COMPANY_GSTIN}", comp_sub_style)
     ]
-    
-    company_col = [logo_container, Spacer(1, 4)] + company_info_p if logo_container else company_info_p
 
-    dup_text = f"<font color='{ACCENT_RED.hexval()}'><b>*** DUPLICATE COPY ***</b></font><br/>" if is_duplicate else ""
-    meta_info_p = [
-        Paragraph(f"{dup_text}{doc_type.upper()}", doc_type_style),
-        Spacer(1, 6),
-        Paragraph(f"<b>Document No:</b> {doc_num}", ParagraphStyle('M1', parent=meta_label, alignment=2)),
-        Paragraph(f"<b>Date:</b> {doc_date}", ParagraphStyle('M2', parent=meta_label, alignment=2)),
-        Paragraph(f"<b>Place of Supply:</b> {client_state if client_state else COMPANY_STATE}", ParagraphStyle('M3', parent=meta_label, alignment=2))
-    ]
+    left_header_content = [logo_container, Spacer(1, 4), company_info_p] if logo_container else company_info_p
 
-    header_table = Table([[company_col, meta_info_p]], colWidths=[310, 230])
+    header_table = Table([[left_header_content, meta_info_p]], colWidths=[310, 230])
     header_table.setStyle(TableStyle([
         ('VALIGN', (0,0), (-1,-1), 'TOP'),
         ('LEFTPADDING', (0,0), (-1,-1), 0),
@@ -193,7 +216,7 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
     is_intra_state = (c_state_str.strip().lower() == COMPANY_STATE.lower())
 
     client_p = [
-        Paragraph("<b>BILL TO:</b>", ParagraphStyle('BTo', parent=styles['Normal'], fontSize=9, textColor=SECONDARY, fontName="Helvetica-Bold")),
+        Paragraph("<b>BILLED TO:</b>", ParagraphStyle('BTo', parent=styles['Normal'], fontSize=9, textColor=PRIMARY, fontName="Helvetica-Bold")),
         Paragraph(f"<b>{client_name}</b>", ParagraphStyle('CName', parent=styles['Normal'], fontSize=10, textColor=TEXT_DARK, fontName="Helvetica-Bold")),
         Paragraph(f"Contact: {client_phone if client_phone else 'N/A'}", meta_label),
         Paragraph(f"State: {c_state_str}", meta_label),
@@ -202,14 +225,15 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
     
     tax_type_str = "Intra-State GST (CGST + SGST)" if is_intra_state else "Inter-State GST (IGST)"
     gst_info_p = [
-        Paragraph("<b>TAX REGIME DETAILS:</b>", ParagraphStyle('TReg', parent=styles['Normal'], fontSize=9, textColor=SECONDARY, fontName="Helvetica-Bold")),
+        Paragraph("<b>TAX REGIME & DETAILS:</b>", ParagraphStyle('TReg', parent=styles['Normal'], fontSize=9, textColor=PRIMARY, fontName="Helvetica-Bold")),
         Paragraph(f"Tax Treatment: <b>{tax_type_str}</b>", meta_label),
-        Paragraph(f"Supplier GSTIN: <b>{COMPANY_GSTIN}</b>", meta_label)
+        Paragraph(f"Supplier GSTIN: <b>{COMPANY_GSTIN}</b>", meta_label),
+        Paragraph(f"Status: <b>Active Record</b>", meta_label)
     ]
 
     client_table = Table([[client_p, gst_info_p]], colWidths=[310, 230])
     client_table.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,-1), BG_LIGHT),
+        ('BACKGROUND', (0,0), (-1,-1), ACCENT_BG),
         ('PADDING', (0,0), (-1,-1), 8),
         ('BOX', (0,0), (-1,-1), 0.5, BORDER_CLR),
         ('VALIGN', (0,0), (-1,-1), 'TOP'),
@@ -299,18 +323,18 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
     )
 
     pay_p = [
-        Paragraph("<b>PAYMENT / REMITTANCE DETAILS:</b>", ParagraphStyle('PHead', parent=styles['Normal'], fontSize=8.5, textColor=SECONDARY, fontName="Helvetica-Bold")),
+        Paragraph("<b>PAYMENT / REMITTANCE DETAILS:</b>", ParagraphStyle('PHead', parent=styles['Normal'], fontSize=8.5, textColor=PRIMARY, fontName="Helvetica-Bold")),
         Spacer(1, 2), Paragraph(bank_text, meta_label)
     ]
     
     terms_p = [
-        Paragraph("<b>TERMS & CONDITIONS:</b>", ParagraphStyle('THead', parent=styles['Normal'], fontSize=8.5, textColor=SECONDARY, fontName="Helvetica-Bold")),
+        Paragraph("<b>TERMS & CONDITIONS:</b>", ParagraphStyle('THead', parent=styles['Normal'], fontSize=8.5, textColor=PRIMARY, fontName="Helvetica-Bold")),
         Spacer(1, 2), Paragraph("1. Payment due within 15 days of invoice date.<br/>2. Quote invoice # on payment.<br/>3. Subject to Bangalore jurisdiction.", meta_label)
     ]
 
     footer_table = Table([[pay_p, terms_p]], colWidths=[280, 260])
     footer_table.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,-1), BG_LIGHT),
+        ('BACKGROUND', (0,0), (-1,-1), ACCENT_BG),
         ('PADDING', (0,0), (-1,-1), 8),
         ('BOX', (0,0), (-1,-1), 0.5, BORDER_CLR),
         ('VALIGN', (0,0), (-1,-1), 'TOP'),
@@ -321,8 +345,30 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
     buffer.seek(0)
     return buffer
 
-# --- HTML PREVIEW RENDERER ---
-def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, items, subtotal, tax_amt, grand_total, is_duplicate=False):
+# --- HTML PREVIEW RENDERER (THEME-AWARE) ---
+def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, items, subtotal, tax_amt, grand_total, is_duplicate=False, theme="Modern Minimalist (Clean Slate)"):
+    # Theme color variables for HTML
+    if theme == "Executive Dark (Bold & Corporate)":
+        primary_color = "#111827"
+        secondary_color = "#4B5563"
+        accent_bg = "#F3F4F6"
+        border_clr = "#E5E7EB"
+    elif theme == "Creative Vibrant (Blue & Slate)":
+        primary_color = "#1E3A8A"
+        secondary_color = "#2563EB"
+        accent_bg = "#EFF6FF"
+        border_clr = "#BFDBFE"
+    elif theme == "Warm Editorial (Classic & Refined)":
+        primary_color = "#78350F"
+        secondary_color = "#D97706"
+        accent_bg = "#FFFBEB"
+        border_clr = "#FDE68A"
+    else:
+        primary_color = "#0F172A"
+        secondary_color = "#64748B"
+        accent_bg = "#F8FAFC"
+        border_clr = "#E2E8F0"
+
     c_state_str = client_state if client_state else "Karnataka"
     is_intra_state = (c_state_str.strip().lower() == COMPANY_STATE.lower())
     
@@ -338,26 +384,26 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
             half_tax = item['tax_rate'] / 2
             items_html += f"""
                 <tr>
-                    <td style="padding: 8px; border-bottom: 1px solid #CBD5E1; text-align: center;">{idx}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #CBD5E1;">{item['desc']}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #CBD5E1; text-align: right;">{item['qty']}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #CBD5E1; text-align: right;">Rs. {item['rate']:,.2f}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #CBD5E1; text-align: right;">Rs. {line_sub:,.2f}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #CBD5E1; text-align: right;">{half_tax:.1f}%</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #CBD5E1; text-align: right;">{half_tax:.1f}%</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #CBD5E1; text-align: right;">Rs. {line_total:,.2f}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: center;">{idx}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid {border_clr};">{item['desc']}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">{item['qty']}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">Rs. {item['rate']:,.2f}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">Rs. {line_sub:,.2f}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">{half_tax:.1f}%</td>
+                    <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">{half_tax:.1f}%</td>
+                    <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">Rs. {line_total:,.2f}</td>
                 </tr>
             """
         else:
             items_html += f"""
                 <tr>
-                    <td style="padding: 8px; border-bottom: 1px solid #CBD5E1; text-align: center;">{idx}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #CBD5E1;">{item['desc']}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #CBD5E1; text-align: right;">{item['qty']}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #CBD5E1; text-align: right;">Rs. {item['rate']:,.2f}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #CBD5E1; text-align: right;">Rs. {line_sub:,.2f}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #CBD5E1; text-align: right;">{item['tax_rate']}%</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #CBD5E1; text-align: right;">Rs. {line_total:,.2f}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: center;">{idx}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid {border_clr};">{item['desc']}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">{item['qty']}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">Rs. {item['rate']:,.2f}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">Rs. {line_sub:,.2f}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">{item['tax_rate']}%</td>
+                    <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">Rs. {line_total:,.2f}</td>
                 </tr>
             """
 
@@ -372,45 +418,45 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
         tax_summary_html += f"<tr><td style='padding: 6px; text-align: right;'>IGST (Integrated Tax):</td><td style='padding: 6px; text-align: right;'>Rs. {tax_amt:,.2f}</td></tr>"
     
     tax_summary_html += f"""
-        <tr style='border-top: 2px solid #0F172A; font-weight: bold; font-size: 14px; color: #0F172A;'>
+        <tr style='border-top: 2px solid {primary_color}; font-weight: bold; font-size: 14px; color: {primary_color};'>
             <td style='padding: 8px; text-align: right;'>Grand Total:</td>
             <td style='padding: 8px; text-align: right;'>Rs. {grand_total:,.2f}</td>
         </tr>
     """
 
-    header_headers = """
-        <th style="padding: 8px; background-color: #0F172A; color: white; text-align: center;">#</th>
-        <th style="padding: 8px; background-color: #0F172A; color: white; text-align: left;">Item / Service Description</th>
-        <th style="padding: 8px; background-color: #0F172A; color: white; text-align: right;">Qty</th>
-        <th style="padding: 8px; background-color: #0F172A; color: white; text-align: right;">Rate (Rs.)</th>
-        <th style="padding: 8px; background-color: #0F172A; color: white; text-align: right;">Amount (Rs.)</th>
-        <th style="padding: 8px; background-color: #0F172A; color: white; text-align: right;">CGST</th>
-        <th style="padding: 8px; background-color: #0F172A; color: white; text-align: right;">SGST</th>
-        <th style="padding: 8px; background-color: #0F172A; color: white; text-align: right;">Total (Rs.)</th>
-    """ if is_intra_state else """
-        <th style="padding: 8px; background-color: #0F172A; color: white; text-align: center;">#</th>
-        <th style="padding: 8px; background-color: #0F172A; color: white; text-align: left;">Item / Service Description</th>
-        <th style="padding: 8px; background-color: #0F172A; color: white; text-align: right;">Qty</th>
-        <th style="padding: 8px; background-color: #0F172A; color: white; text-align: right;">Rate (Rs.)</th>
-        <th style="padding: 8px; background-color: #0F172A; color: white; text-align: right;">Amount (Rs.)</th>
-        <th style="padding: 8px; background-color: #0F172A; color: white; text-align: right;">IGST</th>
-        <th style="padding: 8px; background-color: #0F172A; color: white; text-align: right;">Total (Rs.)</th>
+    header_headers = f"""
+        <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: center;">#</th>
+        <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: left;">Item / Service Description</th>
+        <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Qty</th>
+        <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Rate (Rs.)</th>
+        <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Amount (Rs.)</th>
+        <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">CGST</th>
+        <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">SGST</th>
+        <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Total (Rs.)</th>
+    """ if is_intra_state else f"""
+        <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: center;">#</th>
+        <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: left;">Item / Service Description</th>
+        <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Qty</th>
+        <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Rate (Rs.)</th>
+        <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Amount (Rs.)</th>
+        <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">IGST</th>
+        <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Total (Rs.)</th>
     """
 
     html_content = f"""
-    <div style="background-color: #ffffff; color: #1E293B; padding: 30px; font-family: Helvetica, Arial, sans-serif; border: 1px solid #CBD5E1; border-radius: 6px; max-width: 800px; margin: auto;">
+    <div style="background-color: #ffffff; color: #1E293B; padding: 30px; font-family: Helvetica, Arial, sans-serif; border: 1px solid {border_clr}; border-radius: 6px; max-width: 800px; margin: auto;">
         <table style="width: 100%; border-collapse: collapse;">
             <tr>
                 <td style="vertical-align: top; width: 55%;">
-                    <div style="font-size: 18px; font-weight: bold; color: #0F172A;">{COMPANY_NAME}</div>
-                    <div style="font-size: 11px; font-weight: bold; color: #1E293B; margin-top: 2px;">{COMPANY_SUB}</div>
+                    <div style="font-size: 18px; font-weight: bold; color: {primary_color};">{COMPANY_NAME}</div>
+                    <div style="font-size: 11px; font-weight: bold; color: {secondary_color}; margin-top: 2px;">{COMPANY_SUB}</div>
                     <div style="font-size: 11px; color: #475569; margin-top: 2px;">{COMPANY_ADDR}</div>
                     <div style="font-size: 11px; color: #475569;">Phone: {COMPANY_PHONE} | Email: {COMPANY_EMAIL}</div>
                     <div style="font-size: 11px; color: #475569; margin-top: 2px;"><b>GSTIN:</b> {COMPANY_GSTIN}</div>
                 </td>
                 <td style="vertical-align: top; text-align: right; width: 45%;">
                     {dup_banner}
-                    <div style="font-size: 20px; font-weight: bold; color: #2563EB;">{doc_type.upper()}</div>
+                    <div style="font-size: 20px; font-weight: bold; color: {secondary_color};">{doc_type.upper()}</div>
                     <div style="font-size: 11px; color: #1E293B; margin-top: 6px;"><b>Document No:</b> {doc_num}</div>
                     <div style="font-size: 11px; color: #1E293B;"><b>Date:</b> {doc_date}</div>
                     <div style="font-size: 11px; color: #1E293B;"><b>Place of Supply:</b> {c_state_str}</div>
@@ -418,19 +464,19 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
             </tr>
         </table>
         
-        <hr style="border: none; border-top: 1.5px solid #0F172A; margin: 15px 0;" />
+        <hr style="border: none; border-top: 1.5px solid {primary_color}; margin: 15px 0;" />
 
-        <table style="width: 100%; border-collapse: collapse; background-color: #F8FAFC; border: 0.5px solid #CBD5E1; margin-bottom: 15px;">
+        <table style="width: 100%; border-collapse: collapse; background-color: {accent_bg}; border: 0.5px solid {border_clr}; margin-bottom: 15px;">
             <tr>
                 <td style="padding: 12px; vertical-align: top; width: 50%;">
-                    <div style="font-size: 11px; font-weight: bold; color: #2563EB; margin-bottom: 4px;">BILL TO:</div>
+                    <div style="font-size: 11px; font-weight: bold; color: {primary_color}; margin-bottom: 4px;">BILLED TO:</div>
                     <div style="font-size: 12px; font-weight: bold; color: #0F172A;">{client_name}</div>
                     <div style="font-size: 11px; color: #475569;">Contact: {client_phone if client_phone else 'N/A'}</div>
                     <div style="font-size: 11px; color: #475569;">State: {c_state_str}</div>
                     <div style="font-size: 11px; color: #475569;"><b>Client GSTIN:</b> {client_gstin if client_gstin else 'N/A'}</div>
                 </td>
-                <td style="padding: 12px; vertical-align: top; width: 50%; border-left: 0.5px solid #CBD5E1;">
-                    <div style="font-size: 11px; font-weight: bold; color: #2563EB; margin-bottom: 4px;">TAX REGIME DETAILS:</div>
+                <td style="padding: 12px; vertical-align: top; width: 50%; border-left: 0.5px solid {border_clr};">
+                    <div style="font-size: 11px; font-weight: bold; color: {primary_color}; margin-bottom: 4px;">TAX REGIME & DETAILS:</div>
                     <div style="font-size: 11px; color: #475569;">Tax Treatment: <b>{"Intra-State GST (CGST + SGST)" if is_intra_state else "Inter-State GST (IGST)"}</b></div>
                     <div style="font-size: 11px; color: #475569; margin-top: 2px;">Supplier GSTIN: <b>{COMPANY_GSTIN}</b></div>
                 </td>
@@ -455,18 +501,18 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
             </tr>
         </table>
 
-        <table style="width: 100%; border-collapse: collapse; background-color: #F8FAFC; border: 0.5px solid #CBD5E1;">
+        <table style="width: 100%; border-collapse: collapse; background-color: {accent_bg}; border: 0.5px solid {border_clr};">
             <tr>
                 <td style="padding: 10px; vertical-align: top; width: 50%;">
-                    <div style="font-size: 10px; font-weight: bold; color: #2563EB; margin-bottom: 3px;">PAYMENT / REMITTANCE DETAILS:</div>
+                    <div style="font-size: 10px; font-weight: bold; color: {primary_color}; margin-bottom: 3px;">PAYMENT / REMITTANCE DETAILS:</div>
                     <div style="font-size: 10px; color: #475569; line-height: 1.4;">
                         <b>Account Holder:</b> {ACCOUNT_HOLDER}<br/>
                         <b>Bank:</b> {BANK_NAME} | <b>Account No:</b> {ACCOUNT_NUMBER}<br/>
                         <b>IFSC:</b> {IFSC_CODE} | <b>UPI ID:</b> {UPI_ID}
                     </div>
                 </td>
-                <td style="padding: 10px; vertical-align: top; width: 50%; border-left: 0.5px solid #CBD5E1;">
-                    <div style="font-size: 10px; font-weight: bold; color: #2563EB; margin-bottom: 3px;">TERMS & CONDITIONS:</div>
+                <td style="padding: 10px; vertical-align: top; width: 50%; border-left: 0.5px solid {border_clr};">
+                    <div style="font-size: 10px; font-weight: bold; color: {primary_color}; margin-bottom: 3px;">TERMS & CONDITIONS:</div>
                     <div style="font-size: 10px; color: #475569; line-height: 1.4;">
                         1. Payment due within 15 days of invoice date.<br/>
                         2. Quote invoice # on payment.<br/>
@@ -479,13 +525,23 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
     """
     return html_content
 
-# --- STREAMLIT APP NAVIGATION (USING RADIO BUTTONS INSTEAD OF SIDEBAR SELECTBOX) ---
+# --- STREAMLIT APP NAVIGATION ---
 st.title("🧾 Nexus Billing & Operations Suite")
 
 choice = st.radio("Navigation Menu", ["Create Document", "Document History & Management", "Client Directory", "Recycle Bin"], horizontal=True)
 
 st.sidebar.divider()
-st.sidebar.subheader("🖼️ Invoice Branding")
+st.sidebar.subheader("🎨 Invoice Design & Branding")
+current_theme = get_theme_from_db()
+selected_theme = st.sidebar.selectbox(
+    "Choose Invoice Theme Style", 
+    ["Modern Minimalist (Clean Slate)", "Executive Dark (Bold & Corporate)", "Creative Vibrant (Blue & Slate)", "Warm Editorial (Classic & Refined)"],
+    index=["Modern Minimalist (Clean Slate)", "Executive Dark (Bold & Corporate)", "Creative Vibrant (Blue & Slate)", "Warm Editorial (Classic & Refined)"].index(current_theme) if current_theme in ["Modern Minimalist (Clean Slate)", "Executive Dark (Bold & Corporate)", "Creative Vibrant (Blue & Slate)", "Warm Editorial (Classic & Refined)"] else 0
+)
+if selected_theme != current_theme:
+    save_theme_to_db(selected_theme)
+    st.sidebar.success("Theme updated successfully!")
+
 uploaded_logo = st.sidebar.file_uploader("Upload Company Logo (PNG/JPG)", type=["png", "jpg", "jpeg"])
 if uploaded_logo is not None:
     save_logo_to_db(uploaded_logo)
@@ -577,11 +633,11 @@ if choice == "Create Document":
         st.markdown(f"### **Grand Total: ₹{grand_total:,.2f}**")
 
         st.divider()
-        st.subheader("👁️ Live Layout Preview")
+        st.subheader(f"👁️ Live Layout Preview ({selected_theme})")
         html_preview = render_html_preview(
             doc_type, doc_num, client_name if client_name else "Client Name Placeholder", 
             client_phone, client_gstin, client_state, str(doc_date), 
-            st.session_state.item_list, subtotal, tax_amt, grand_total
+            st.session_state.item_list, subtotal, tax_amt, grand_total, theme=selected_theme
         )
         st.components.v1.html(html_preview, height=650, scrolling=True)
 
@@ -606,7 +662,7 @@ if choice == "Create Document":
 
             pdf_data = generate_pdf(
                 doc_type, doc_num, client_name, client_phone, client_gstin, client_state, 
-                str(doc_date), json.loads(items_json), subtotal, tax_amt, grand_total
+                str(doc_date), json.loads(items_json), subtotal, tax_amt, grand_total, theme=selected_theme
             )
             st.download_button(
                 label=f"📄 Download {doc_type} PDF",
@@ -653,7 +709,7 @@ elif choice == "Document History & Management":
                     doc_data['doc_type'], doc_data['doc_num'], doc_data['client_name'], 
                     doc_data['client_phone'], doc_data['client_gstin'], doc_data['client_state'],
                     doc_data['doc_date'], items_list, doc_data['subtotal'], doc_data['tax_amt'], 
-                    doc_data['grand_total']
+                    doc_data['grand_total'], theme=selected_theme
                 )
                 st.components.v1.html(html_preview_existing, height=650, scrolling=True)
 
@@ -663,14 +719,14 @@ elif choice == "Document History & Management":
                     pdf_orig = generate_pdf(
                         doc_data['doc_type'], doc_data['doc_num'], doc_data['client_name'], doc_data['client_phone'],
                         doc_data['client_gstin'], doc_data['client_state'], doc_data['doc_date'], items_list,
-                        doc_data['subtotal'], doc_data['tax_amt'], doc_data['grand_total'], is_duplicate=False
+                        doc_data['subtotal'], doc_data['tax_amt'], doc_data['grand_total'], is_duplicate=False, theme=selected_theme
                     )
                     st.download_button(label="📥 Download Original Copy", data=pdf_orig, file_name=f"{doc_data['doc_num']}_Original.pdf", mime="application/pdf")
                 with col_p2:
                     pdf_dup = generate_pdf(
                         doc_data['doc_type'], doc_data['doc_num'], doc_data['client_name'], doc_data['client_phone'],
                         doc_data['client_gstin'], doc_data['client_state'], doc_data['doc_date'], items_list,
-                        doc_data['subtotal'], doc_data['tax_amt'], doc_data['grand_total'], is_duplicate=True
+                        doc_data['subtotal'], doc_data['tax_amt'], doc_data['grand_total'], is_duplicate=True, theme=selected_theme
                     )
                     st.download_button(label="📥 Download Duplicate Copy", data=pdf_dup, file_name=f"{doc_data['doc_num']}_Duplicate.pdf", mime="application/pdf")
 
