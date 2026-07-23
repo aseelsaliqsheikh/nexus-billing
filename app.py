@@ -136,7 +136,7 @@ def get_theme_from_db():
         return row[0].decode('utf-8')
     return "Modern Minimalist (Clean Slate)"
 
-# --- WATERMARK CANVAS CALLBACK (INCREASED LOGO WATERMARK SIZE) ---
+# --- WATERMARK CANVAS CALLBACK (LOGO WATERMARK) ---
 def draw_watermark(canvas, doc):
     logo_file = get_logo_from_db()
     if logo_file:
@@ -144,8 +144,8 @@ def draw_watermark(canvas, doc):
             canvas.saveState()
             canvas.setFillAlpha(0.15)
             img = ImageReader(logo_file)
-            img_width = 350
-            img_height = 175
+            img_width = 250
+            img_height = 125
             page_width, page_height = letter
             
             canvas.translate(page_width / 2.0, page_height / 2.0)
@@ -204,8 +204,7 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
     logo_container = None
     if logo_file:
         try:
-            # Increased header logo size
-            logo_img = Image(logo_file, width=130, height=65)
+            logo_img = Image(logo_file, width=90, height=45)
             logo_img.hAlign = 'LEFT'
             logo_container = logo_img
         except Exception:
@@ -373,7 +372,7 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
     buffer.seek(0)
     return buffer
 
-# --- HTML PREVIEW RENDERER (INCREASED LOGO WATERMARK SIZE) ---
+# --- HTML PREVIEW RENDERER (LOGO WATERMARK) ---
 def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, items, subtotal, tax_amt, grand_total, is_duplicate=False, theme="Modern Minimalist (Clean Slate)"):
     if theme == "Executive Dark (Bold & Corporate)":
         primary_color = "#111827"
@@ -404,10 +403,9 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
     logo_b64 = get_logo_base64()
     logo_watermark_html = ""
     if logo_b64:
-        # Increased HTML preview watermark size to 450px
         logo_watermark_html = f"""
         <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); opacity: 0.15; z-index: 10; pointer-events: none;">
-            <img src="data:image/png;base64,{logo_b64}" style="width: 450px; height: auto;" />
+            <img src="data:image/png;base64,{logo_b64}" style="width: 300px; height: auto;" />
         </div>
         """
 
