@@ -128,7 +128,17 @@ def get_theme_from_db():
         return row[0].decode('utf-8')
     return "Modern Minimalist (Clean Slate)"
 
-# --- PROFESSIONAL PDF GENERATOR ENGINE (WITH REDESIGNED STYLES) ---
+# --- WATERMARK CANVAS CALLBACK ---
+def draw_watermark(canvas, doc):
+    canvas.saveState()
+    canvas.setFont("Helvetica-Bold", 60)
+    canvas.setFillColor(colors.HexColor("#E2E8F0"), alpha=0.3)
+    canvas.translate(300, 400)
+    canvas.rotate(45)
+    canvas.drawCentredString(0, 0, "NEXUS EVENTS")
+    canvas.restoreState()
+
+# --- PROFESSIONAL PDF GENERATOR ENGINE (WITH WATERMARK & REDESIGNED STYLES) ---
 def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, items, subtotal, tax_amt, grand_total, is_duplicate=False, theme="Modern Minimalist (Clean Slate)"):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
@@ -341,13 +351,12 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
     ]))
     story.append(footer_table)
 
-    doc.build(story)
+    doc.build(story, onFirstPage=draw_watermark, onLaterPages=draw_watermark)
     buffer.seek(0)
     return buffer
 
-# --- HTML PREVIEW RENDERER (THEME-AWARE) ---
+# --- HTML PREVIEW RENDERER (THEME-AWARE WITH WATERMARK) ---
 def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, items, subtotal, tax_amt, grand_total, is_duplicate=False, theme="Modern Minimalist (Clean Slate)"):
-    # Theme color variables for HTML
     if theme == "Executive Dark (Bold & Corporate)":
         primary_color = "#111827"
         secondary_color = "#4B5563"
@@ -444,8 +453,14 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
     """
 
     html_content = f"""
-    <div style="background-color: #ffffff; color: #1E293B; padding: 30px; font-family: Helvetica, Arial, sans-serif; border: 1px solid {border_clr}; border-radius: 6px; max-width: 800px; margin: auto;">
-        <table style="width: 100%; border-collapse: collapse;">
+    <div style="position: relative; background-color: #ffffff; color: #1E293B; padding: 30px; font-family: Helvetica, Arial, sans-serif; border: 1px solid {border_clr}; border-radius: 6px; max-width: 800px; margin: auto; overflow: hidden;">
+        
+        <!-- Watermark Overlay -->
+        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-45deg); font-size: 64px; font-weight: bold; color: #E2E8F0; opacity: 0.3; z-index: 10; pointer-events: none; white-space: nowrap;">
+            NEXUS EVENTS
+        </div>
+
+        <table style="width: 100%; border-collapse: collapse; position: relative; z-index: 1;">
             <tr>
                 <td style="vertical-align: top; width: 55%;">
                     <div style="font-size: 18px; font-weight: bold; color: {primary_color};">{COMPANY_NAME}</div>
@@ -464,9 +479,9 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
             </tr>
         </table>
         
-        <hr style="border: none; border-top: 1.5px solid {primary_color}; margin: 15px 0;" />
+        <hr style="border: none; border-top: 1.5px solid {primary_color}; margin: 15px 0; position: relative; z-index: 1;" />
 
-        <table style="width: 100%; border-collapse: collapse; background-color: {accent_bg}; border: 0.5px solid {border_clr}; margin-bottom: 15px;">
+        <table style="width: 100%; border-collapse: collapse; background-color: {accent_bg}; border: 0.5px solid {border_clr}; margin-bottom: 15px; position: relative; z-index: 1;">
             <tr>
                 <td style="padding: 12px; vertical-align: top; width: 50%;">
                     <div style="font-size: 11px; font-weight: bold; color: {primary_color}; margin-bottom: 4px;">BILLED TO:</div>
@@ -483,14 +498,14 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
             </tr>
         </table>
 
-        <table style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 15px;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 15px; position: relative; z-index: 1;">
             <thead>
                 <tr>{header_headers}</tr>
             </thead>
             <tbody>{items_html}</tbody>
         </table>
 
-        <table style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 20px;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 20px; position: relative; z-index: 1;">
             <tr>
                 <td style="width: 60%;"></td>
                 <td style="width: 40%;">
@@ -501,7 +516,7 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
             </tr>
         </table>
 
-        <table style="width: 100%; border-collapse: collapse; background-color: {accent_bg}; border: 0.5px solid {border_clr};">
+        <table style="width: 100%; border-collapse: collapse; background-color: {accent_bg}; border: 0.5px solid {border_clr}; position: relative; z-index: 1;">
             <tr>
                 <td style="padding: 10px; vertical-align: top; width: 50%;">
                     <div style="font-size: 10px; font-weight: bold; color: {primary_color}; margin-bottom: 3px;">PAYMENT / REMITTANCE DETAILS:</div>
@@ -534,7 +549,7 @@ st.sidebar.divider()
 st.sidebar.subheader("🎨 Invoice Design & Branding")
 current_theme = get_theme_from_db()
 selected_theme = st.sidebar.selectbox(
-    "Choose Invoice Theme Style", 
+    "Choose InvoiceTheme Style", 
     ["Modern Minimalist (Clean Slate)", "Executive Dark (Bold & Corporate)", "Creative Vibrant (Blue & Slate)", "Warm Editorial (Classic & Refined)"],
     index=["Modern Minimalist (Clean Slate)", "Executive Dark (Bold & Corporate)", "Creative Vibrant (Blue & Slate)", "Warm Editorial (Classic & Refined)"].index(current_theme) if current_theme in ["Modern Minimalist (Clean Slate)", "Executive Dark (Bold & Corporate)", "Creative Vibrant (Blue & Slate)", "Warm Editorial (Classic & Refined)"] else 0
 )
@@ -624,212 +639,164 @@ if choice == "Create Document":
             st.session_state.item_list = []
             st.rerun()
 
-        subtotal = sum(i['qty'] * i['rate'] for i in st.session_state.item_list)
-        tax_amt = sum((i['qty'] * i['rate']) * (i['tax_rate']/100) for i in st.session_state.item_list)
-        grand_total = subtotal + tax_amt
+    subtotal = sum(i['qty'] * i['rate'] for i in st.session_state.item_list)
+    tax_amt = sum((i['qty'] * i['rate']) * (i['tax_rate'] / 100) for i in st.session_state.item_list)
+    grand_total = subtotal + tax_amt
 
-        st.divider()
-        st.markdown(f"#### Subtotal: ₹{subtotal:,.2f} | GST Tax Total: ₹{tax_amt:,.2f}")
-        st.markdown(f"### **Grand Total: ₹{grand_total:,.2f}**")
+    st.divider()
+    st.subheader("👁️ Live Document Preview & Export")
 
-        st.divider()
-        st.subheader(f"👁️ Live Layout Preview ({selected_theme})")
-        html_preview = render_html_preview(
-            doc_type, doc_num, client_name if client_name else "Client Name Placeholder", 
-            client_phone, client_gstin, client_state, str(doc_date), 
-            st.session_state.item_list, subtotal, tax_amt, grand_total, theme=selected_theme
+    if st.session_state.item_list and client_name:
+        # Render HTML preview with theme & watermark
+        preview_html = render_html_preview(
+            doc_type, doc_num, client_name, client_phone, client_gstin, client_state, 
+            str(doc_date), st.session_state.item_list, subtotal, tax_amt, grand_total, 
+            is_duplicate=False, theme=selected_theme
         )
-        st.components.v1.html(html_preview, height=650, scrolling=True)
+        st.components.v1.html(preview_html, height=750, scrolling=True)
 
-        st.divider()
-        st.subheader("💾 Save Document")
-        doc_status = "Pending"
+        col_p1, col_p2 = st.columns(2)
+        with col_p1:
+            pdf_buffer = generate_pdf(
+                doc_type, doc_num, client_name, client_phone, client_gstin, client_state, 
+                str(doc_date), st.session_state.item_list, subtotal, tax_amt, grand_total, 
+                is_duplicate=False, theme=selected_theme
+            )
+            st.download_button(
+                label="📥 Download Original PDF",
+                data=pdf_buffer,
+                file_name=f"{doc_num}.pdf",
+                mime="application/pdf"
+            )
+        with col_p2:
+            pdf_dup_buffer = generate_pdf(
+                doc_type, doc_num, client_name, client_phone, client_gstin, client_state, 
+                str(doc_date), st.session_state.item_list, subtotal, tax_amt, grand_total, 
+                is_duplicate=True, theme=selected_theme
+            )
+            st.download_button(
+                label="📥 Download Duplicate Copy PDF",
+                data=pdf_dup_buffer,
+                file_name=f"{doc_num}-DUPLICATE.pdf",
+                mime="application/pdf"
+            )
 
-        if st.button("💾 Generate & Save Document", type="primary"):
+        if st.button("💾 Save Document to Database"):
             items_json = json.dumps(st.session_state.item_list)
             cursor.execute('''
                 INSERT INTO documents (doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, subtotal, tax_amt, grand_total, status, items_json)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (doc_type, doc_num, client_name, client_phone, client_gstin, client_state, str(doc_date), subtotal, tax_amt, grand_total, doc_status, items_json))
+            ''', (doc_type, doc_num, client_name, client_phone, client_gstin, client_state, str(doc_date), subtotal, tax_amt, grand_total, "Issued", items_json))
             conn.commit()
-
-            if client_mode == "New Client (Quick Add)" and client_name:
-                cursor.execute("INSERT INTO clients (name, phone, state, tax_id) VALUES (?, ?, ?, ?)", (client_name, client_phone, client_state, client_gstin))
-                conn.commit()
-
-            st.session_state.item_list = []
-            st.success(f"{doc_type} '{doc_num}' created successfully!")
-
-            pdf_data = generate_pdf(
-                doc_type, doc_num, client_name, client_phone, client_gstin, client_state, 
-                str(doc_date), json.loads(items_json), subtotal, tax_amt, grand_total, theme=selected_theme
-            )
-            st.download_button(
-                label=f"📄 Download {doc_type} PDF",
-                data=pdf_data,
-                file_name=f"{doc_num}.pdf",
-                mime="application/pdf"
-            )
+            st.success("Document successfully saved to database!")
+    else:
+        st.info("Please add at least one line item and fill in the client name to generate the preview and export options.")
 
 # --- 2. DOCUMENT HISTORY & MANAGEMENT ---
 elif choice == "Document History & Management":
-    st.header("📊 Document Register & Management")
-
-    df = pd.read_sql_query("SELECT id, doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, subtotal, tax_amt, grand_total, status, items_json FROM documents ORDER BY id DESC", conn)
-
-    if not df.empty:
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Total Revenue Billed", f"₹{df[df['doc_type']=='Tax Invoice']['grand_total'].sum():,.2f}")
-        m2.metric("Pending Invoices Amount", f"₹{df[(df['doc_type']=='Tax Invoice') & (df['status']=='Pending')]['grand_total'].sum():,.2f}")
-        m3.metric("Total Documents Issued", len(df))
-
-        st.divider()
-        st.subheader("Document Register")
-        st.dataframe(df[['id', 'doc_type', 'doc_num', 'client_name', 'client_state', 'doc_date', 'grand_total', 'status']], use_container_width=True)
-
-        st.divider()
-        st.subheader("🛠️ Manage Document")
+    st.header("📂 Document History & Management")
+    docs = cursor.execute("SELECT id, doc_type, doc_num, client_name, doc_date, grand_total, status FROM documents").fetchall()
+    
+    if docs:
+        df_docs = pd.DataFrame(docs, columns=["ID", "Type", "Doc #", "Client", "Date", "Grand Total (₹)", "Status"])
+        st.dataframe(df_docs, use_container_width=True)
         
-        selected_id = st.number_input("Enter Document ID to Action", min_value=int(df['id'].min()), max_value=int(df['id'].max()), step=1)
-        doc_row = df[df['id'] == selected_id]
-
-        if not doc_row.empty:
-            doc_data = doc_row.iloc[0]
-            try:
-                items_list = json.loads(doc_data['items_json'])
-            except:
-                items_list = []
-
-            tab_view, tab_print, tab_status, tab_delete = st.tabs([
-                "👁️ View Actual Layout", "🖨️ Print Copies", "🔄 Update Status", "🗑️ Move to Recycle Bin"
-            ])
-
-            with tab_view:
-                html_preview_existing = render_html_preview(
-                    doc_data['doc_type'], doc_data['doc_num'], doc_data['client_name'], 
-                    doc_data['client_phone'], doc_data['client_gstin'], doc_data['client_state'],
-                    doc_data['doc_date'], items_list, doc_data['subtotal'], doc_data['tax_amt'], 
-                    doc_data['grand_total'], theme=selected_theme
+        doc_ids = [d[0] for d in docs]
+        selected_doc_id = st.selectbox("Select Document ID for Actions", doc_ids)
+        
+        if selected_doc_id:
+            row = cursor.execute("SELECT doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, subtotal, tax_amt, grand_total, status, items_json FROM documents WHERE id = ?", (selected_doc_id,)).fetchone()
+            if row:
+                d_type, d_num, c_name, c_phone, c_gstin, c_state, d_date, sub, tax, g_tot, status, i_json = row
+                items = json.loads(i_json)
+                
+                st.write(f"### Managing: {d_num} ({c_name})")
+                
+                # Live Preview of existing saved document
+                preview_html = render_html_preview(
+                    d_type, d_num, c_name, c_phone, c_gstin, c_state, d_date, items, sub, tax, g_tot, is_duplicate=False, theme=selected_theme
                 )
-                st.components.v1.html(html_preview_existing, height=650, scrolling=True)
+                st.components.v1.html(preview_html, height=600, scrolling=True)
 
-            with tab_print:
-                col_p1, col_p2 = st.columns(2)
-                with col_p1:
-                    pdf_orig = generate_pdf(
-                        doc_data['doc_type'], doc_data['doc_num'], doc_data['client_name'], doc_data['client_phone'],
-                        doc_data['client_gstin'], doc_data['client_state'], doc_data['doc_date'], items_list,
-                        doc_data['subtotal'], doc_data['tax_amt'], doc_data['grand_total'], is_duplicate=False, theme=selected_theme
+                col_h1, col_h2 = st.columns(2)
+                with col_h1:
+                    pdf_buf = generate_pdf(
+                        d_type, d_num, c_name, c_phone, c_gstin, c_state, d_date, items, sub, tax, g_tot, is_duplicate=False, theme=selected_theme
                     )
-                    st.download_button(label="📥 Download Original Copy", data=pdf_orig, file_name=f"{doc_data['doc_num']}_Original.pdf", mime="application/pdf")
-                with col_p2:
-                    pdf_dup = generate_pdf(
-                        doc_data['doc_type'], doc_data['doc_num'], doc_data['client_name'], doc_data['client_phone'],
-                        doc_data['client_gstin'], doc_data['client_state'], doc_data['doc_date'], items_list,
-                        doc_data['subtotal'], doc_data['tax_amt'], doc_data['grand_total'], is_duplicate=True, theme=selected_theme
-                    )
-                    st.download_button(label="📥 Download Duplicate Copy", data=pdf_dup, file_name=f"{doc_data['doc_num']}_Duplicate.pdf", mime="application/pdf")
-
-            with tab_status:
-                new_status = st.selectbox("Select New Status", ["Paid", "Pending", "Sent", "Draft"], index=["Paid", "Pending", "Sent", "Draft"].index(doc_data['status']) if doc_data['status'] in ["Paid", "Pending", "Sent", "Draft"] else 0)
-                if st.button("Update Status"):
-                    cursor.execute("UPDATE documents SET status = ? WHERE id = ?", (new_status, int(selected_id)))
-                    conn.commit()
-                    st.success("Document status updated successfully!")
-                    st.rerun()
-
-            with tab_delete:
-                st.warning("Moving this document to the Recycle Bin will remove it from active records. You can restore it anytime from the Recycle Bin view.")
-                if st.button("🗑️ Move Document to Recycle Bin", type="primary"):
-                    cursor.execute('''
-                        INSERT INTO deleted_documents (original_id, doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, subtotal, tax_amt, grand_total, status, items_json, deleted_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (int(doc_data['id']), doc_data['doc_type'], doc_data['doc_num'], doc_data['client_name'], doc_data['client_phone'], doc_data['client_gstin'], doc_data['client_state'], doc_data['doc_date'], doc_data['subtotal'], doc_data['tax_amt'], doc_data['grand_total'], doc_data['status'], doc_data['items_json'], str(date.today())))
-                    
-                    cursor.execute("DELETE FROM documents WHERE id = ?", (int(selected_id),))
-                    conn.commit()
-                    st.success("Document moved to Recycle Bin!")
-                    st.rerun()
+                    st.download_button("📥 Download PDF", data=pdf_buf, file_name=f"{d_num}.pdf", mime="application/pdf", key=f"dl_{selected_doc_id}")
+                with col_h2:
+                    if st.button("🗑️ Move to Recycle Bin", key=f"del_{selected_doc_id}"):
+                        cursor.execute('''
+                            INSERT INTO deleted_documents (original_id, doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, subtotal, tax_amt, grand_total, status, items_json, deleted_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', (selected_doc_id, d_type, d_num, c_name, c_phone, c_gstin, c_state, d_date, sub, tax, g_tot, status, i_json, str(datetime.now())))
+                        cursor.execute("DELETE FROM documents WHERE id = ?", (selected_doc_id,))
+                        conn.commit()
+                        st.success("Document moved to Recycle Bin successfully!")
+                        st.rerun()
     else:
-        st.info("No documents generated yet.")
+        st.info("No documents found in history yet.")
 
 # --- 3. CLIENT DIRECTORY ---
 elif choice == "Client Directory":
     st.header("📇 Client Directory")
     
-    clients_df = pd.read_sql_query("SELECT id, name, phone, email, address, state, tax_id FROM clients ORDER BY name ASC", conn)
-    
-    with st.form("add_client_form", clear_on_submit=True):
+    with st.form("new_client_form", clear_on_submit=True):
         st.subheader("Add New Client Profile")
-        c_col1, c_col2 = st.columns(2)
-        with c_col1:
-            new_c_name = st.text_input("Client / Business Name")
-            new_c_phone = st.text_input("Phone Number")
-            new_c_email = st.text_input("Email Address")
-        with c_col2:
-            new_c_state = st.text_input("State", value="Karnataka")
-            new_c_gstin = st.text_input("GSTIN / Tax ID")
-            new_c_addr = st.text_area("Billing Address")
-            
-        submitted_client = st.form_submit_button("Save Client")
-        if submitted_client and new_c_name:
+        nc_name = st.text_input("Client/Business Name")
+        nc_phone = st.text_input("Phone Number")
+        nc_email = st.text_input("Email Address")
+        nc_address = st.text_area("Billing Address")
+        nc_state = st.text_input("State", value="Karnataka")
+        nc_tax = st.text_input("GSTIN / Tax ID")
+        
+        submitted = st.form_submit_button("Save Client")
+        if submitted and nc_name:
             cursor.execute("INSERT INTO clients (name, phone, email, address, state, tax_id) VALUES (?, ?, ?, ?, ?, ?)",
-                           (new_c_name, new_c_phone, new_c_email, new_c_addr, new_c_state, new_c_gstin))
+                           (nc_name, nc_phone, nc_email, nc_address, nc_state, nc_tax))
             conn.commit()
-            st.success(f"Client '{new_c_name}' added successfully!")
+            st.success(f"Client '{nc_name}' added successfully!")
             st.rerun()
 
-    st.divider()
-    st.subheader("Existing Clients Register")
-    if not clients_df.empty:
-        st.dataframe(clients_df, use_container_width=True)
-        
-        st.markdown("### 🗑️ Delete Unwanted Client")
-        with st.form("delete_client_form"):
-            client_options = {row['name']: row['id'] for _, row in clients_df.iterrows()}
-            selected_client_to_delete = st.selectbox("Select Client to Delete", options=list(client_options.keys()))
-            delete_client_btn = st.form_submit_button("❌ Delete Selected Client", type="primary")
-            
-            if delete_client_btn and selected_client_to_delete:
-                client_id_to_del = client_options[selected_client_to_delete]
-                cursor.execute("DELETE FROM clients WHERE id = ?", (client_id_to_del,))
-                conn.commit()
-                st.success(f"Client '{selected_client_to_delete}' has been deleted successfully!")
-                st.rerun()
+    st.subheader("Saved Clients List")
+    all_clients = cursor.execute("SELECT id, name, phone, email, state, tax_id FROM clients").fetchall()
+    if all_clients:
+        df_clients = pd.DataFrame(all_clients, columns=["ID", "Name", "Phone", "Email", "State", "GSTIN"])
+        st.dataframe(df_clients, use_container_width=True)
     else:
-        st.info("No clients registered yet.")
+        st.info("No client records found.")
 
 # --- 4. RECYCLE BIN ---
 elif choice == "Recycle Bin":
-    st.header("♻️ Recycle Bin — Deleted Documents")
+    st.header("🗑️ Recycle Bin (Deleted Documents)")
+    del_docs = cursor.execute("SELECT bin_id, doc_num, client_name, grand_total, deleted_at FROM deleted_documents").fetchall()
     
-    bin_df = pd.read_sql_query("SELECT bin_id, original_id, doc_type, doc_num, client_name, grand_total, deleted_at FROM deleted_documents ORDER BY bin_id DESC", conn)
-    
-    if not bin_df.empty:
-        st.dataframe(bin_df, use_container_width=True)
+    if del_docs:
+        df_del = pd.DataFrame(del_docs, columns=["Bin ID", "Doc #", "Client", "Grand Total (₹)", "Deleted At"])
+        st.dataframe(df_del, use_container_width=True)
         
-        st.divider()
-        st.subheader("🛠️ Manage Recycle Bin Item")
-        restore_bin_id = st.number_input("Enter Bin ID to Restore or Delete Permanently", min_value=int(bin_df['bin_id'].min()), max_value=int(bin_df['bin_id'].max()), step=1, key="restore_id_input")
+        bin_ids = [d[0] for d in del_docs]
+        selected_bin_id = st.selectbox("Select Bin ID to Restore or Purge", bin_ids)
         
-        col_r1, col_r2 = st.columns(2)
-        with col_r1:
+        col_b1, col_b2 = st.columns(2)
+        with col_b1:
             if st.button("♻️ Restore Document"):
-                bin_row = cursor.execute("SELECT * FROM deleted_documents WHERE bin_id = ?", (int(restore_bin_id),)).fetchone()
-                if bin_row:
+                row = cursor.execute("SELECT original_id, doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, subtotal, tax_amt, grand_total, status, items_json FROM deleted_documents WHERE bin_id = ?", (selected_bin_id,)).fetchone()
+                if row:
+                    orig_id, d_type, d_num, c_name, c_phone, c_gstin, c_state, d_date, sub, tax, g_tot, status, i_json = row
                     cursor.execute('''
-                        INSERT OR REPLACE INTO documents (id, doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, subtotal, tax_amt, grand_total, status, items_json)
+                        INSERT INTO documents (id, doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, subtotal, tax_amt, grand_total, status, items_json)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (bin_row[1], bin_row[2], bin_row[3], bin_row[4], bin_row[5], bin_row[6], bin_row[7], bin_row[8], bin_row[9], bin_row[10], bin_row[11], bin_row[12], bin_row[13]))
-                    cursor.execute("DELETE FROM deleted_documents WHERE bin_id = ?", (int(restore_bin_id),))
+                    ''', (orig_id, d_type, d_num, c_name, c_phone, c_gstin, c_state, d_date, sub, tax, g_tot, status, i_json))
+                    cursor.execute("DELETE FROM deleted_documents WHERE bin_id = ?", (selected_bin_id,))
                     conn.commit()
-                    st.success("Document successfully restored!")
+                    st.success("Document restored successfully!")
                     st.rerun()
-        with col_r2:
-            if st.button("❌ Delete Permanently", type="primary"):
-                cursor.execute("DELETE FROM deleted_documents WHERE bin_id = ?", (int(restore_bin_id),))
+        with col_b2:
+            if st.button("🔥 Permanently Delete"):
+                cursor.execute("DELETE FROM deleted_documents WHERE bin_id = ?", (selected_bin_id,))
                 conn.commit()
-                st.warning("Document permanently deleted.")
+                st.success("Document permanently purged from database!")
                 st.rerun()
     else:
-        st.info("Recycle bin is currently empty.")
+        st.info("Recycle bin is empty.")
