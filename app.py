@@ -48,6 +48,12 @@ cursor.execute('''
         value BLOB
     )
 ''')
+cursor.execute('''
+    CREATE TABLE IF NOT EXISTS bank_accounts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        label TEXT, bank_name TEXT, account_holder TEXT, account_number TEXT, ifsc_code TEXT, upi_id TEXT
+    )
+''')
 conn.commit()
 
 # Ensure older database schemas automatically catch up with required columns
@@ -91,6 +97,15 @@ if "bin_id" not in deleted_cols or "original_id" not in deleted_cols:
     ''')
     conn.commit()
 
+# Ensure a default bank account exists if table is empty
+existing_banks = cursor.execute("SELECT COUNT(*) FROM bank_accounts").fetchone()[0]
+if existing_banks == 0:
+    cursor.execute('''
+        INSERT INTO bank_accounts (label, bank_name, account_holder, account_number, ifsc_code, upi_id)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ''', ("Primary Account", "HDFC Bank", "Nexus Center of Events", "50200012345678", "HDFC0001234", "nexus@upi"))
+    conn.commit()
+
 # --- DEFAULT COMPANY & SETTINGS FUNCTIONS ---
 DEFAULT_SETTINGS = {
     "company_name": "NEXUS CENTER OF EVENTS",
@@ -100,11 +115,6 @@ DEFAULT_SETTINGS = {
     "company_phone": "+91 98765 43210",
     "company_email": "info@nexusevents.com",
     "company_gstin": "29AAAAA0000A1Z5",
-    "bank_name": "HDFC Bank",
-    "account_holder": "Nexus Center of Events",
-    "account_number": "50200012345678",
-    "ifsc_code": "HDFC0001234",
-    "upi_id": "nexus@upi",
     "terms_conditions": "1. Payment due within 15 days of invoice date.\n2. Quote invoice # on payment.\n3. Subject to Bangalore jurisdiction."
 }
 
@@ -157,7 +167,7 @@ def draw_watermark(canvas, doc):
         pass
 
 # --- PROFESSIONAL PDF GENERATOR ENGINE ---
-def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, items, subtotal, tax_amt, grand_total, is_duplicate=False, theme="Modern Minimalist (Clean Slate)", is_non_tax=False):
+def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, items, subtotal, tax_amt, grand_total, bank_details=None, is_duplicate=False, theme="Modern Minimalist (Clean Slate)", is_non_tax=False):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
     story = []
@@ -197,13 +207,13 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
     comp_phone_str = get_setting('company_phone', DEFAULT_SETTINGS['company_phone'])
     comp_email_str = get_setting('company_email', DEFAULT_SETTINGS['company_email'])
     comp_gstin_str = get_setting('company_gstin', DEFAULT_SETTINGS['company_gstin'])
-
-    bank_name_str = get_setting('bank_name', DEFAULT_SETTINGS['bank_name'])
-    acc_holder_str = get_setting('account_holder', DEFAULT_SETTINGS['account_holder'])
-    acc_num_str = get_setting('account_number', DEFAULT_SETTINGS['account_number'])
-    ifsc_str = get_setting('ifsc_code', DEFAULT_SETTINGS['ifsc_code'])
-    upi_str = get_setting('upi_id', DEFAULT_SETTINGS['upi_id'])
     terms_str = get_setting('terms_conditions', DEFAULT_SETTINGS['terms_conditions'])
+
+    if not bank_details:
+        b_row = cursor.execute("SELECT bank_name, account_holder, account_number, ifsc_code, upi_id FROM bank_accounts LIMIT 1").fetchone()
+        bank_details = b_row if b_row else ("HDFC Bank", "Nexus Center of Events", "50200012345678", "HDFC0001234", "nexus@upi")
+
+    bank_name_str, acc_holder_str, acc_num_str, ifsc_str, upi_str = bank_details
 
     comp_title_style = ParagraphStyle('CompTitle', parent=styles['Heading1'], fontSize=16, leading=18, textColor=PRIMARY, fontName="Helvetica-Bold")
     comp_sub_style = ParagraphStyle('CompSub', parent=styles['Normal'], fontSize=8.5, leading=11, textColor=SECONDARY)
@@ -414,7 +424,7 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
     return buffer
 
 # --- HTML PREVIEW RENDERER ---
-def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, items, subtotal, tax_amt, grand_total, is_duplicate=False, theme="Modern Minimalist (Clean Slate)", is_non_tax=False):
+def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, items, subtotal, tax_amt, grand_total, bank_details=None, is_duplicate=False, theme="Modern Minimalist (Clean Slate)", is_non_tax=False):
     if theme == "Executive Dark (Bold & Corporate)":
         primary_color = "#111827"
         secondary_color = "#4B5563"
@@ -443,13 +453,13 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
     comp_phone_str = get_setting('company_phone', DEFAULT_SETTINGS['company_phone'])
     comp_email_str = get_setting('company_email', DEFAULT_SETTINGS['company_email'])
     comp_gstin_str = get_setting('company_gstin', DEFAULT_SETTINGS['company_gstin'])
-
-    bank_name_str = get_setting('bank_name', DEFAULT_SETTINGS['bank_name'])
-    acc_holder_str = get_setting('account_holder', DEFAULT_SETTINGS['account_holder'])
-    acc_num_str = get_setting('account_number', DEFAULT_SETTINGS['account_number'])
-    ifsc_str = get_setting('ifsc_code', DEFAULT_SETTINGS['ifsc_code'])
-    upi_str = get_setting('upi_id', DEFAULT_SETTINGS['upi_id'])
     terms_str = get_setting('terms_conditions', DEFAULT_SETTINGS['terms_conditions'])
+
+    if not bank_details:
+        b_row = cursor.execute("SELECT bank_name, account_holder, account_number, ifsc_code, upi_id FROM bank_accounts LIMIT 1").fetchone()
+        bank_details = b_row if b_row else ("HDFC Bank", "Nexus Center of Events", "50200012345678", "HDFC0001234", "nexus@upi")
+
+    bank_name_str, acc_holder_str, acc_num_str, ifsc_str, upi_str = bank_details
 
     c_state_str = client_state if client_state else "Karnataka"
     is_intra_state = (c_state_str.strip().lower() == comp_state_str.lower())
@@ -683,10 +693,11 @@ if choice == "Create Document":
     with col_c:
         doc_date = st.date_input("Date", date.today())
     with col_d:
-        st.write("")
-        st.write("")
-        if is_non_tax:
-            st.info("ℹ️ Non-Tax Mode active (GST disabled for items).")
+        # Bank account selection dropdown for document generation
+        saved_banks = cursor.execute("SELECT id, label, bank_name, account_holder, account_number, ifsc_code, upi_id FROM bank_accounts").fetchall()
+        bank_options = {f"{b[1]} ({b[2]} - {b[4][-4:]})": b[2:] for b in saved_banks}
+        selected_bank_label = st.selectbox("Remittance Bank Account", list(bank_options.keys()))
+        selected_bank_tuple = bank_options[selected_bank_label]
 
     st.subheader("Client Information")
     clients_db = cursor.execute("SELECT name, phone, state, tax_id FROM clients").fetchall()
@@ -776,7 +787,7 @@ if choice == "Create Document":
         preview_html = render_html_preview(
             doc_type, doc_num, client_name, client_phone, client_gstin, client_state, 
             str(doc_date), st.session_state.item_list, subtotal, tax_amt, grand_total, 
-            is_duplicate=False, theme=selected_theme, is_non_tax=is_non_tax
+            bank_details=selected_bank_tuple, is_duplicate=False, theme=selected_theme, is_non_tax=is_non_tax
         )
         st.components.v1.html(preview_html, height=750, scrolling=True)
 
@@ -785,7 +796,7 @@ if choice == "Create Document":
             pdf_buffer = generate_pdf(
                 doc_type, doc_num, client_name, client_phone, client_gstin, client_state, 
                 str(doc_date), st.session_state.item_list, subtotal, tax_amt, grand_total, 
-                is_duplicate=False, theme=selected_theme, is_non_tax=is_non_tax
+                bank_details=selected_bank_tuple, is_duplicate=False, theme=selected_theme, is_non_tax=is_non_tax
             )
             st.download_button(
                 label="📥 Download Original PDF",
@@ -797,7 +808,7 @@ if choice == "Create Document":
             pdf_dup_buffer = generate_pdf(
                 doc_type, doc_num, client_name, client_phone, client_gstin, client_state, 
                 str(doc_date), st.session_state.item_list, subtotal, tax_amt, grand_total, 
-                is_duplicate=True, theme=selected_theme, is_non_tax=is_non_tax
+                bank_details=selected_bank_tuple, is_duplicate=True, theme=selected_theme, is_non_tax=is_non_tax
             )
             st.download_button(
                 label="📥 Download Duplicate Copy PDF",
@@ -894,7 +905,7 @@ elif choice == "Client Directory":
 # --- 4. COMPANY & INVOICE SETTINGS ---
 elif choice == "Company & Invoice Settings":
     st.header("⚙️ Company & Invoice Customization Settings")
-    st.write("Update your company profile, business details, bank remittance information, and default terms & conditions below. All changes will apply to future PDF exports and live previews.")
+    st.write("Update your company profile, business details, manage multiple bank accounts, and configure default terms & conditions below.")
 
     with st.form("company_settings_form"):
         st.subheader("🏢 Company Information")
@@ -909,20 +920,10 @@ elif choice == "Company & Invoice Settings":
             cfg_email = st.text_input("Email Address", value=get_setting('company_email', DEFAULT_SETTINGS['company_email']))
             cfg_gstin = st.text_input("GSTIN Number", value=get_setting('company_gstin', DEFAULT_SETTINGS['company_gstin']))
 
-        st.subheader("🏦 Bank / Remittance Details")
-        col_b1, col_b2 = st.columns(2)
-        with col_b1:
-            cfg_bank = st.text_input("Bank Name", value=get_setting('bank_name', DEFAULT_SETTINGS['bank_name']))
-            cfg_holder = st.text_input("Account Holder Name", value=get_setting('account_holder', DEFAULT_SETTINGS['account_holder']))
-            cfg_accnum = st.text_input("Account Number", value=get_setting('account_number', DEFAULT_SETTINGS['account_number']))
-        with col_b2:
-            cfg_ifsc = st.text_input("IFSC Code", value=get_setting('ifsc_code', DEFAULT_SETTINGS['ifsc_code']))
-            cfg_upi = st.text_input("UPI ID", value=get_setting('upi_id', DEFAULT_SETTINGS['upi_id']))
-
         st.subheader("📜 Terms & Conditions")
         cfg_terms = st.text_area("Terms & Conditions (One per line)", value=get_setting('terms_conditions', DEFAULT_SETTINGS['terms_conditions']), height=100)
 
-        save_settings_btn = st.form_submit_button("💾 Save All Settings")
+        save_settings_btn = st.form_submit_button("💾 Save Company Settings")
         if save_settings_btn:
             save_setting('company_name', cfg_name)
             save_setting('company_sub', cfg_sub)
@@ -931,13 +932,50 @@ elif choice == "Company & Invoice Settings":
             save_setting('company_phone', cfg_phone)
             save_setting('company_email', cfg_email)
             save_setting('company_gstin', cfg_gstin)
-            save_setting('bank_name', cfg_bank)
-            save_setting('account_holder', cfg_holder)
-            save_setting('account_number', cfg_accnum)
-            save_setting('ifsc_code', cfg_ifsc)
-            save_setting('upi_id', cfg_upi)
             save_setting('terms_conditions', cfg_terms)
-            st.success("Company settings updated successfully! Watermarks and exports will reflect these changes immediately.")
+            st.success("Company settings updated successfully!")
+
+    st.divider()
+    st.subheader("🏦 Manage Bank Accounts")
+    st.write("Add multiple bank accounts below. You can select your preferred account when creating an invoice.")
+
+    with st.form("add_bank_form", clear_on_submit=True):
+        b_col1, b_col2 = st.columns(2)
+        with b_col1:
+            bank_label = st.text_input("Account Label / Nickname (e.g. Primary HDFC, Current ICICI)")
+            b_name = st.text_input("Bank Name")
+            b_holder = st.text_input("Account Holder Name", value="Nexus Center of Events")
+        with b_col2:
+            b_accnum = st.text_input("Account Number")
+            b_ifsc = st.text_input("IFSC Code")
+            b_upi = st.text_input("UPI ID")
+
+        add_bank_btn = st.form_submit_button("+ Save New Bank Account")
+        if add_bank_btn and bank_label and b_accnum:
+            cursor.execute("INSERT INTO bank_accounts (label, bank_name, account_holder, account_number, ifsc_code, upi_id) VALUES (?, ?, ?, ?, ?, ?)",
+                           (bank_label, b_name, b_holder, b_accnum, b_ifsc, b_upi))
+            conn.commit()
+            st.success(f"Bank account '{bank_label}' added successfully!")
+            st.rerun()
+
+    st.write("### Saved Bank Accounts")
+    all_banks = cursor.execute("SELECT id, label, bank_name, account_holder, account_number, ifsc_code, upi_id FROM bank_accounts").fetchall()
+    if all_banks:
+        df_banks = pd.DataFrame(all_banks, columns=["ID", "Label", "Bank Name", "Holder", "Account No", "IFSC", "UPI ID"])
+        st.dataframe(df_banks, use_container_width=True)
+        
+        bank_ids_to_del = [b[0] for b in all_banks]
+        del_bank_id = st.selectbox("Select Bank ID to Delete", bank_ids_to_del, key="del_bank_select")
+        if st.button("🗑️ Delete Selected Bank Account"):
+            if len(all_banks) > 1:
+                cursor.execute("DELETE FROM bank_accounts WHERE id = ?", (del_bank_id,))
+                conn.commit()
+                st.success("Bank account deleted successfully!")
+                st.rerun()
+            else:
+                st.warning("You must keep at least one bank account in the system.")
+    else:
+        st.info("No bank accounts registered.")
 
 # --- 5. RECYCLE BIN ---
 elif choice == "Recycle Bin":
