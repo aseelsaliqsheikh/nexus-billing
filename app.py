@@ -125,8 +125,6 @@ def save_setting(key, val):
 def save_logo_to_db(uploaded_file):
     if uploaded_file is not None:
         logo_bytes = uploaded_file.getvalue()
-        cursor.execute("REPLACE INTO settings (key, value) VALUES ('company_logo', ?)", ('company_logo_bin', logo_bytes)) # stored safely
-        # Actually store under explicit binary blob key
         cursor.execute("REPLACE INTO settings (key, value) VALUES ('company_logo_blob', ?)", (logo_bytes,))
         conn.commit()
 
