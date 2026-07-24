@@ -5,7 +5,7 @@ import json
 import os
 import base64
 from datetime import datetime, date
-from reportlab.lib.pagesizes import letter
+from reportlab.lib.pagesizes import letter, A4, legal
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, HRFlowable
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -150,26 +150,36 @@ def save_theme_to_db(theme_name):
 def get_theme_from_db():
     return get_setting('invoice_theme', "Modern Minimalist (Clean Slate)")
 
+# Map page size strings to ReportLab objects & dimensions
+PAGE_SIZE_MAP = {
+    "Letter": (letter, "8.5in", "11in"),
+    "A4": (A4, "210mm", "297mm"),
+    "Legal": (legal, "8.5in", "14in")
+}
+
 # --- TEXT WATERMARK CANVAS CALLBACK ---
-def draw_watermark(canvas, doc):
-    try:
-        canvas.saveState()
-        canvas.setFont("Helvetica-Bold", 55)
-        canvas.setFillColor(colors.HexColor("#0F172A"), alpha=0.08)
-        page_width, page_height = letter
-        
-        watermark_text = get_setting('company_name', DEFAULT_SETTINGS['company_name']).upper()
-        canvas.translate(page_width / 2.0, page_height / 2.0)
-        canvas.rotate(30)
-        canvas.drawCentredString(0, 0, watermark_text)
-        canvas.restoreState()
-    except Exception:
-        pass
+def make_watermark_callback(page_dimensions):
+    def draw_watermark(canvas, doc):
+        try:
+            canvas.saveState()
+            canvas.setFont("Helvetica-Bold", 55)
+            canvas.setFillColor(colors.HexColor("#0F172A"), alpha=0.08)
+            page_width, page_height = page_dimensions
+            
+            watermark_text = get_setting('company_name', DEFAULT_SETTINGS['company_name']).upper()
+            canvas.translate(page_width / 2.0, page_height / 2.0)
+            canvas.rotate(30)
+            canvas.drawCentredString(0, 0, watermark_text)
+            canvas.restoreState()
+        except Exception:
+            pass
+    return draw_watermark
 
 # --- PROFESSIONAL PDF GENERATOR ENGINE ---
-def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, items, subtotal, tax_amt, grand_total, bank_details=None, is_duplicate=False, theme="Modern Minimalist (Clean Slate)", is_non_tax=False):
+def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, items, subtotal, tax_amt, grand_total, bank_details=None, is_duplicate=False, theme="Modern Minimalist (Clean Slate)", is_non_tax=False, page_size_name="Letter"):
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
+    pagesize_tuple, _, _ = PAGE_SIZE_MAP.get(page_size_name, PAGE_SIZE_MAP["Letter"])
+    doc = SimpleDocTemplate(buffer, pagesize=pagesize_tuple, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
     story = []
     styles = getSampleStyleSheet()
 
@@ -415,7 +425,6 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
     ]
 
     if is_delivery_challan:
-        # For Delivery Challans, omit payment details and use full width for terms or instructions
         footer_table = Table([[terms_p]], colWidths=[540])
     else:
         bank_text = (
@@ -437,12 +446,13 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
     ]))
     story.append(footer_table)
 
-    doc.build(story, onFirstPage=draw_watermark, onLaterPages=draw_watermark)
+    watermark_cb = make_watermark_callback(pagesize_tuple)
+    doc.build(story, onFirstPage=watermark_cb, onLaterPages=watermark_cb)
     buffer.seek(0)
     return buffer
 
 # --- HTML PREVIEW RENDERER ---
-def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, items, subtotal, tax_amt, grand_total, bank_details=None, is_duplicate=False, theme="Modern Minimalist (Clean Slate)", is_non_tax=False):
+def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, items, subtotal, tax_amt, grand_total, bank_details=None, is_duplicate=False, theme="Modern Minimalist (Clean Slate)", is_non_tax=False, page_size_name="Letter"):
     if theme == "Executive Dark (Bold & Corporate)":
         primary_color = "#111827"
         secondary_color = "#4B5563"
@@ -485,6 +495,14 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
     
     dup_banner = f"<div style='color: #DC2626; font-weight: bold; font-size: 16px; margin-bottom: 5px;'>*** DUPLICATE COPY ***</div>" if is_duplicate else ""
     
+    # Map page sizes to preview container widths and heights for accurate visual scale representation
+    preview_dims = {
+        "Letter": ("8.5in", "11in"),
+        "A4": ("210mm", "297mm"),
+        "Legal": ("8.5in", "14in")
+    }
+    p_width, p_height = preview_dims.get(page_size_name, ("8.5in", "11in"))
+
     text_watermark_html = f"""
     <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); opacity: 0.08; z-index: 10; pointer-events: none; font-size: 55px; font-weight: bold; color: {primary_color}; white-space: nowrap; font-family: Helvetica, Arial, sans-serif;">
         {comp_name_str.upper()}
@@ -636,7 +654,7 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
         """
 
     html_content = f"""
-    <div style="position: relative; background-color: #ffffff; color: #1E293B; padding: 30px; font-family: Helvetica, Arial, sans-serif; border: 1px solid {border_clr}; border-radius: 6px; max-width: 800px; margin: auto; overflow: hidden;">
+    <div style="position: relative; background-color: #ffffff; color: #1E293B; padding: 30px; font-family: Helvetica, Arial, sans-serif; border: 1px solid {border_clr}; border-radius: 6px; width: {p_width}; min-height: {p_height}; margin: auto; overflow: hidden; box-sizing: border-box;">
         
         {text_watermark_html}
 
@@ -717,6 +735,14 @@ selected_theme = st.sidebar.selectbox(
 if selected_theme != current_theme:
     save_theme_to_db(selected_theme)
     st.sidebar.success("Theme updated successfully!")
+
+# Added Page Size Selector in Sidebar for PDF Downloads & Live Previews
+selected_page_size = st.sidebar.selectbox(
+    "📄 Print Page Size",
+    ["Letter", "A4", "Legal"],
+    index=0,
+    help="Select the target page layout size for downloading PDFs and live previews."
+)
 
 uploaded_logo = st.sidebar.file_uploader("Upload Company Logo (PNG/JPG)", type=["png", "jpg", "jpeg"])
 if uploaded_logo is not None:
@@ -849,9 +875,9 @@ if choice == "Create Document":
         preview_html = render_html_preview(
             doc_type, doc_num, client_name, client_phone, client_gstin, client_state, 
             str(doc_date), st.session_state.item_list, subtotal, tax_amt, grand_total, 
-            bank_details=selected_bank_tuple, is_duplicate=False, theme=selected_theme, is_non_tax=is_non_tax
+            bank_details=selected_bank_tuple, is_duplicate=False, theme=selected_theme, is_non_tax=is_non_tax, page_size_name=selected_page_size
         )
-        st.components.v1.html(preview_html, height=750, scrolling=True)
+        st.components.v1.html(preview_html, height=850, scrolling=True)
 
         if st.button("💾 Save Document to Database"):
             items_json = json.dumps(st.session_state.item_list)
@@ -867,10 +893,10 @@ if choice == "Create Document":
             pdf_buffer = generate_pdf(
                 doc_type, doc_num, client_name, client_phone, client_gstin, client_state, 
                 str(doc_date), st.session_state.item_list, subtotal, tax_amt, grand_total, 
-                bank_details=selected_bank_tuple, is_duplicate=False, theme=selected_theme, is_non_tax=is_non_tax
+                bank_details=selected_bank_tuple, is_duplicate=False, theme=selected_theme, is_non_tax=is_non_tax, page_size_name=selected_page_size
             )
             st.download_button(
-                label="📥 Download Original PDF",
+                label=f"📥 Download Original PDF ({selected_page_size})",
                 data=pdf_buffer,
                 file_name=f"{doc_num}.pdf",
                 mime="application/pdf"
@@ -879,10 +905,10 @@ if choice == "Create Document":
             pdf_dup_buffer = generate_pdf(
                 doc_type, doc_num, client_name, client_phone, client_gstin, client_state, 
                 str(doc_date), st.session_state.item_list, subtotal, tax_amt, grand_total, 
-                bank_details=selected_bank_tuple, is_duplicate=True, theme=selected_theme, is_non_tax=is_non_tax
+                bank_details=selected_bank_tuple, is_duplicate=True, theme=selected_theme, is_non_tax=is_non_tax, page_size_name=selected_page_size
             )
             st.download_button(
-                label="📥 Download Duplicate Copy PDF",
+                label=f"📥 Download Duplicate Copy PDF ({selected_page_size})",
                 data=pdf_dup_buffer,
                 file_name=f"{doc_num}-DUPLICATE.pdf",
                 mime="application/pdf"
@@ -912,16 +938,16 @@ elif choice == "Document History & Management":
                 st.write(f"### Managing: {d_num} ({c_name})")
                 
                 preview_html = render_html_preview(
-                    d_type, d_num, c_name, c_phone, c_gstin, c_state, d_date, items, sub, tax, g_tot, is_duplicate=False, theme=selected_theme, is_non_tax=is_non_tax_doc
+                    d_type, d_num, c_name, c_phone, c_gstin, c_state, d_date, items, sub, tax, g_tot, is_duplicate=False, theme=selected_theme, is_non_tax=is_non_tax_doc, page_size_name=selected_page_size
                 )
-                st.components.v1.html(preview_html, height=600, scrolling=True)
+                st.components.v1.html(preview_html, height=850, scrolling=True)
 
                 col_h1, col_h2 = st.columns(2)
                 with col_h1:
                     pdf_buf = generate_pdf(
-                        d_type, d_num, c_name, c_phone, c_gstin, c_state, d_date, items, sub, tax, g_tot, is_duplicate=False, theme=selected_theme, is_non_tax=is_non_tax_doc
+                        d_type, d_num, c_name, c_phone, c_gstin, c_state, d_date, items, sub, tax, g_tot, is_duplicate=False, theme=selected_theme, is_non_tax=is_non_tax_doc, page_size_name=selected_page_size
                     )
-                    st.download_button("📥 Download PDF", data=pdf_buf, file_name=f"{d_num}.pdf", mime="application/pdf", key=f"dl_{selected_doc_id}")
+                    st.download_button(f"📥 Download PDF ({selected_page_size})", data=pdf_buf, file_name=f"{d_num}.pdf", mime="application/pdf", key=f"dl_{selected_doc_id}")
                 with col_h2:
                     if st.button("🗑️ Move to Recycle Bin", key=f"del_{selected_doc_id}"):
                         cursor.execute('''
