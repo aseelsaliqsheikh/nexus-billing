@@ -5,7 +5,7 @@ import json
 import os
 import base64
 from datetime import datetime, date
-from reportlab.lib.pagesizes import letter, A4, legal
+from reportlab.lib.pagesizes import A4, letter, legal
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, HRFlowable
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -152,8 +152,8 @@ def get_theme_from_db():
 
 # Map page size strings to ReportLab objects & dimensions
 PAGE_SIZE_MAP = {
-    "Letter": (letter, "8.5in", "11in"),
     "A4": (A4, "210mm", "297mm"),
+    "Letter": (letter, "8.5in", "11in"),
     "Legal": (legal, "8.5in", "14in")
 }
 
@@ -162,8 +162,8 @@ def make_watermark_callback(page_dimensions):
     def draw_watermark(canvas, doc):
         try:
             canvas.saveState()
-            canvas.setFont("Helvetica-Bold", 55)
-            canvas.setFillColor(colors.HexColor("#0F172A"), alpha=0.08)
+            canvas.setFont("Helvetica-Bold", 45)
+            canvas.setFillColor(colors.HexColor("#0F172A"), alpha=0.06)
             page_width, page_height = page_dimensions
             
             watermark_text = get_setting('company_name', DEFAULT_SETTINGS['company_name']).upper()
@@ -176,10 +176,12 @@ def make_watermark_callback(page_dimensions):
     return draw_watermark
 
 # --- PROFESSIONAL PDF GENERATOR ENGINE ---
-def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, items, subtotal, tax_amt, grand_total, bank_details=None, is_duplicate=False, theme="Modern Minimalist (Clean Slate)", is_non_tax=False, page_size_name="Letter"):
+def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, items, subtotal, tax_amt, grand_total, bank_details=None, is_duplicate=False, theme="Modern Minimalist (Clean Slate)", is_non_tax=False, page_size_name="A4"):
     buffer = io.BytesIO()
-    pagesize_tuple, _, _ = PAGE_SIZE_MAP.get(page_size_name, PAGE_SIZE_MAP["Letter"])
-    doc = SimpleDocTemplate(buffer, pagesize=pagesize_tuple, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
+    pagesize_tuple, _, _ = PAGE_SIZE_MAP.get(page_size_name, PAGE_SIZE_MAP["A4"])
+    
+    # 30pt margins give ample width (535pt printable width for A4) preventing right-side label cutoffs
+    doc = SimpleDocTemplate(buffer, pagesize=pagesize_tuple, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
     story = []
     styles = getSampleStyleSheet()
 
@@ -225,21 +227,21 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
 
     bank_name_str, acc_holder_str, acc_num_str, ifsc_str, upi_str = bank_details
 
-    comp_title_style = ParagraphStyle('CompTitle', parent=styles['Heading1'], fontSize=16, leading=18, textColor=PRIMARY, fontName="Helvetica-Bold")
+    comp_title_style = ParagraphStyle('CompTitle', parent=styles['Heading1'], fontSize=15, leading=18, textColor=PRIMARY, fontName="Helvetica-Bold")
     comp_sub_style = ParagraphStyle('CompSub', parent=styles['Normal'], fontSize=8.5, leading=11, textColor=SECONDARY)
-    doc_type_style = ParagraphStyle('DocType', parent=styles['Heading1'], fontSize=18, leading=20, textColor=SECONDARY, alignment=2, fontName="Helvetica-Bold")
+    doc_type_style = ParagraphStyle('DocType', parent=styles['Heading1'], fontSize=16, leading=19, textColor=SECONDARY, alignment=2, fontName="Helvetica-Bold")
     meta_label = ParagraphStyle('MetaLabel', parent=styles['Normal'], fontSize=8.5, leading=11, textColor=TEXT_DARK)
     table_hdr = ParagraphStyle('TblHdr', parent=styles['Normal'], fontSize=8.5, textColor=colors.white, fontName="Helvetica-Bold", alignment=1)
     table_cell = ParagraphStyle('TblCell', parent=styles['Normal'], fontSize=8.5, textColor=TEXT_DARK, leading=11)
     table_cell_r = ParagraphStyle('TblCellR', parent=styles['Normal'], fontSize=8.5, textColor=TEXT_DARK, leading=11, alignment=2)
     tot_label_style = ParagraphStyle('TotLabel', parent=styles['Normal'], fontSize=9, textColor=TEXT_DARK, alignment=2, fontName="Helvetica-Bold")
-    tot_val_style = ParagraphStyle('TotVal', parent=styles['Normal'], fontSize=11, textColor=PRIMARY, alignment=2, fontName="Helvetica-Bold")
+    tot_val_style = ParagraphStyle('TotVal', parent=styles['Normal'], fontSize=10.5, textColor=PRIMARY, alignment=2, fontName="Helvetica-Bold")
 
     logo_file = get_logo_from_db()
     logo_container = None
     if logo_file:
         try:
-            logo_img = Image(logo_file, width=130, height=65)
+            logo_img = Image(logo_file, width=120, height=60)
             logo_img.hAlign = 'LEFT'
             logo_container = logo_img
         except Exception:
@@ -273,22 +275,25 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
 
     left_header_content = [logo_container, Spacer(1, 4), company_info_p] if logo_container else company_info_p
 
-    header_table = Table([[left_header_content, meta_info_p]], colWidths=[310, 230])
+    # Total width = 535pt to match standard 30pt margins on A4 (595.27 pt width)
+    header_table = Table([[left_header_content, meta_info_p]], colWidths=[310, 225])
     header_table.setStyle(TableStyle([
         ('VALIGN', (0,0), (-1,-1), 'TOP'),
         ('LEFTPADDING', (0,0), (-1,-1), 0),
         ('RIGHTPADDING', (0,0), (-1,-1), 0),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+        ('TOPPADDING', (0,0), (-1,-1), 0),
     ]))
     story.append(header_table)
-    story.append(Spacer(1, 8))
-    story.append(HRFlowable(width="100%", thickness=1.5, color=PRIMARY, spaceBefore=2, spaceAfter=8))
+    story.append(Spacer(1, 6))
+    story.append(HRFlowable(width="100%", thickness=1.2, color=PRIMARY, spaceBefore=2, spaceAfter=6))
 
     c_state_str = client_state if client_state else "Karnataka"
     is_intra_state = (c_state_str.strip().lower() == comp_state_str.lower())
 
     client_p = [
-        Paragraph("<b>BILLED / DELIVERED TO:</b>", ParagraphStyle('BTo', parent=styles['Normal'], fontSize=9, textColor=PRIMARY, fontName="Helvetica-Bold")),
-        Paragraph(f"<b>{client_name}</b>", ParagraphStyle('CName', parent=styles['Normal'], fontSize=10, textColor=TEXT_DARK, fontName="Helvetica-Bold")),
+        Paragraph("<b>BILLED / DELIVERED TO:</b>", ParagraphStyle('BTo', parent=styles['Normal'], fontSize=8.5, textColor=PRIMARY, fontName="Helvetica-Bold")),
+        Paragraph(f"<b>{client_name}</b>", ParagraphStyle('CName', parent=styles['Normal'], fontSize=9.5, textColor=TEXT_DARK, fontName="Helvetica-Bold")),
         Paragraph(f"Contact: {client_phone if client_phone else 'N/A'}", meta_label),
         Paragraph(f"State: {c_state_str}", meta_label),
         Paragraph(f"<b>Client GSTIN:</b> {client_gstin if client_gstin and not is_non_tax else 'N/A'}", meta_label)
@@ -296,14 +301,14 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
     
     if is_delivery_challan:
         gst_info_p = [
-            Paragraph("<b>CHALLAN DETAILS:</b>", ParagraphStyle('TReg', parent=styles['Normal'], fontSize=9, textColor=PRIMARY, fontName="Helvetica-Bold")),
+            Paragraph("<b>CHALLAN DETAILS:</b>", ParagraphStyle('TReg', parent=styles['Normal'], fontSize=8.5, textColor=PRIMARY, fontName="Helvetica-Bold")),
             Paragraph("Document Purpose: <b>Delivery of Goods (Non-Tax Supply)</b>", meta_label),
             Paragraph(f"Supplier Status: <b>{comp_name_str}</b>", meta_label),
             Paragraph(f"Status: <b>Active Record</b>", meta_label)
         ]
     elif is_non_tax:
         gst_info_p = [
-            Paragraph("<b>INVOICE DETAILS:</b>", ParagraphStyle('TReg', parent=styles['Normal'], fontSize=9, textColor=PRIMARY, fontName="Helvetica-Bold")),
+            Paragraph("<b>INVOICE DETAILS:</b>", ParagraphStyle('TReg', parent=styles['Normal'], fontSize=8.5, textColor=PRIMARY, fontName="Helvetica-Bold")),
             Paragraph("Tax Type: <b>Non-Tax / Composition / Bill of Supply</b>", meta_label),
             Paragraph(f"Supplier Status: <b>Unregistered / Non-Taxable Service</b>", meta_label),
             Paragraph(f"Status: <b>Active Record</b>", meta_label)
@@ -311,21 +316,21 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
     else:
         tax_type_str = "Intra-State GST (CGST + SGST)" if is_intra_state else "Inter-State GST (IGST)"
         gst_info_p = [
-            Paragraph("<b>TAX REGIME & DETAILS:</b>", ParagraphStyle('TReg', parent=styles['Normal'], fontSize=9, textColor=PRIMARY, fontName="Helvetica-Bold")),
+            Paragraph("<b>TAX REGIME & DETAILS:</b>", ParagraphStyle('TReg', parent=styles['Normal'], fontSize=8.5, textColor=PRIMARY, fontName="Helvetica-Bold")),
             Paragraph(f"Tax Treatment: <b>{tax_type_str}</b>", meta_label),
             Paragraph(f"Supplier GSTIN: <b>{comp_gstin_str}</b>", meta_label),
             Paragraph(f"Status: <b>Active Record</b>", meta_label)
         ]
 
-    client_table = Table([[client_p, gst_info_p]], colWidths=[310, 230])
+    client_table = Table([[client_p, gst_info_p]], colWidths=[310, 225])
     client_table.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,-1), ACCENT_BG),
-        ('PADDING', (0,0), (-1,-1), 8),
+        ('PADDING', (0,0), (-1,-1), 6),
         ('BOX', (0,0), (-1,-1), 0.5, BORDER_CLR),
         ('VALIGN', (0,0), (-1,-1), 'TOP'),
     ]))
     story.append(client_table)
-    story.append(Spacer(1, 10))
+    story.append(Spacer(1, 8))
 
     if is_non_tax:
         table_data = [[
@@ -333,7 +338,7 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
             Paragraph("Qty", table_hdr), Paragraph("Rate (Rs.)", table_hdr),
             Paragraph("Total Amount (Rs.)", table_hdr)
         ]]
-        col_w = [30, 260, 50, 90, 110]
+        col_w = [25, 255, 45, 95, 115]
     elif is_intra_state:
         table_data = [[
             Paragraph("#", table_hdr), Paragraph("Item / Service Description", table_hdr),
@@ -341,7 +346,7 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
             Paragraph("Amount (Rs.)", table_hdr),
             Paragraph("CGST", table_hdr), Paragraph("SGST", table_hdr), Paragraph("Total (Rs.)", table_hdr)
         ]]
-        col_w = [25, 175, 35, 65, 75, 45, 45, 80]
+        col_w = [22, 175, 30, 65, 75, 42, 42, 84]
     else:
         table_data = [[
             Paragraph("#", table_hdr), Paragraph("Item / Service Description", table_hdr),
@@ -349,7 +354,7 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
             Paragraph("Amount (Rs.)", table_hdr),
             Paragraph("IGST", table_hdr), Paragraph("Total (Rs.)", table_hdr)
         ]]
-        col_w = [25, 205, 40, 75, 85, 55, 95]
+        col_w = [22, 200, 35, 75, 85, 50, 68]
 
     for idx, item in enumerate(items, start=1):
         line_sub = item['qty'] * item['rate']
@@ -385,10 +390,10 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
         ('BACKGROUND', (0,0), (-1,0), PRIMARY),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
         ('GRID', (0,0), (-1,-1), 0.5, BORDER_CLR),
-        ('PADDING', (0,0), (-1,-1), 6),
+        ('PADDING', (0,0), (-1,-1), 5),
     ]))
     story.append(item_table)
-    story.append(Spacer(1, 10))
+    story.append(Spacer(1, 8))
 
     if is_non_tax:
         summary_rows = [["Grand Total:", f"Rs. {grand_total:,.2f}"]]
@@ -405,18 +410,18 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
     summary_table_data = []
     for r in summary_rows:
         is_grand = (r[0] == "Grand Total:")
-        l_style = tot_label_style if not is_grand else ParagraphStyle('GTL', parent=tot_label_style, fontSize=11, textColor=PRIMARY)
+        l_style = tot_label_style if not is_grand else ParagraphStyle('GTL', parent=tot_label_style, fontSize=10, textColor=PRIMARY)
         v_style = table_cell_r if not is_grand else tot_val_style
         summary_table_data.append([Paragraph(r[0], l_style), Paragraph(r[1], v_style)])
 
-    summary_table = Table(summary_table_data, colWidths=[380, 160])
+    summary_table = Table(summary_table_data, colWidths=[375, 160])
     summary_table.setStyle(TableStyle([
         ('ALIGN', (0,0), (-1,-1), 'RIGHT'),
-        ('PADDING', (0,0), (-1,-1), 4),
+        ('PADDING', (0,0), (-1,-1), 3),
         ('LINEABOVE', (0,-1), (-1,-1), 1, PRIMARY),
     ]))
     story.append(summary_table)
-    story.append(Spacer(1, 12))
+    story.append(Spacer(1, 10))
 
     formatted_terms = terms_str.replace('\n', '<br/>')
     terms_p = [
@@ -425,7 +430,7 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
     ]
 
     if is_delivery_challan:
-        footer_table = Table([[terms_p]], colWidths=[540])
+        footer_table = Table([[terms_p]], colWidths=[535])
     else:
         bank_text = (
             f"<b>Account Holder:</b> {acc_holder_str}<br/>"
@@ -436,11 +441,11 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
             Paragraph("<b>PAYMENT / REMITTANCE DETAILS:</b>", ParagraphStyle('PHead', parent=styles['Normal'], fontSize=8.5, textColor=PRIMARY, fontName="Helvetica-Bold")),
             Spacer(1, 2), Paragraph(bank_text, meta_label)
         ]
-        footer_table = Table([[pay_p, terms_p]], colWidths=[280, 260])
+        footer_table = Table([[pay_p, terms_p]], colWidths=[275, 260])
 
     footer_table.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,-1), ACCENT_BG),
-        ('PADDING', (0,0), (-1,-1), 8),
+        ('PADDING', (0,0), (-1,-1), 6),
         ('BOX', (0,0), (-1,-1), 0.5, BORDER_CLR),
         ('VALIGN', (0,0), (-1,-1), 'TOP'),
     ]))
@@ -452,7 +457,7 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
     return buffer
 
 # --- HTML PREVIEW RENDERER ---
-def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, items, subtotal, tax_amt, grand_total, bank_details=None, is_duplicate=False, theme="Modern Minimalist (Clean Slate)", is_non_tax=False, page_size_name="Letter"):
+def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, items, subtotal, tax_amt, grand_total, bank_details=None, is_duplicate=False, theme="Modern Minimalist (Clean Slate)", is_non_tax=False, page_size_name="A4"):
     if theme == "Executive Dark (Bold & Corporate)":
         primary_color = "#111827"
         secondary_color = "#4B5563"
@@ -493,18 +498,17 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
     is_intra_state = (c_state_str.strip().lower() == comp_state_str.lower())
     is_delivery_challan = ("Delivery Challan" in doc_type)
     
-    dup_banner = f"<div style='color: #DC2626; font-weight: bold; font-size: 16px; margin-bottom: 5px;'>*** DUPLICATE COPY ***</div>" if is_duplicate else ""
+    dup_banner = f"<div style='color: #DC2626; font-weight: bold; font-size: 15px; margin-bottom: 4px;'>*** DUPLICATE COPY ***</div>" if is_duplicate else ""
     
-    # Map page sizes to preview container widths and heights for accurate visual scale representation
     preview_dims = {
-        "Letter": ("8.5in", "11in"),
         "A4": ("210mm", "297mm"),
+        "Letter": ("8.5in", "11in"),
         "Legal": ("8.5in", "14in")
     }
-    p_width, p_height = preview_dims.get(page_size_name, ("8.5in", "11in"))
+    p_width, p_height = preview_dims.get(page_size_name, ("210mm", "297mm"))
 
     text_watermark_html = f"""
-    <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); opacity: 0.08; z-index: 10; pointer-events: none; font-size: 55px; font-weight: bold; color: {primary_color}; white-space: nowrap; font-family: Helvetica, Arial, sans-serif;">
+    <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); opacity: 0.06; z-index: 10; pointer-events: none; font-size: 45px; font-weight: bold; color: {primary_color}; white-space: nowrap; font-family: Helvetica, Arial, sans-serif;">
         {comp_name_str.upper()}
     </div>
     """
@@ -516,11 +520,11 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
             line_total = line_sub
             items_html += f"""
                 <tr>
-                    <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: center;">{idx}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid {border_clr};">{item['desc']}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">{item['qty']}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">Rs. {item['rate']:,.2f}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">Rs. {line_total:,.2f}</td>
+                    <td style="padding: 6px; border-bottom: 1px solid {border_clr}; text-align: center;">{idx}</td>
+                    <td style="padding: 6px; border-bottom: 1px solid {border_clr};">{item['desc']}</td>
+                    <td style="padding: 6px; border-bottom: 1px solid {border_clr}; text-align: right;">{item['qty']}</td>
+                    <td style="padding: 6px; border-bottom: 1px solid {border_clr}; text-align: right;">Rs. {item['rate']:,.2f}</td>
+                    <td style="padding: 6px; border-bottom: 1px solid {border_clr}; text-align: right;">Rs. {line_total:,.2f}</td>
                 </tr>
             """
         else:
@@ -530,80 +534,80 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
                 half_tax = item['tax_rate'] / 2
                 items_html += f"""
                     <tr>
-                        <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: center;">{idx}</td>
-                        <td style="padding: 8px; border-bottom: 1px solid {border_clr};">{item['desc']}</td>
-                        <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">{item['qty']}</td>
-                        <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">Rs. {item['rate']:,.2f}</td>
-                        <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">Rs. {line_sub:,.2f}</td>
-                        <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">{half_tax:.1f}%</td>
-                        <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">{half_tax:.1f}%</td>
-                        <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">Rs. {line_total:,.2f}</td>
+                        <td style="padding: 6px; border-bottom: 1px solid {border_clr}; text-align: center;">{idx}</td>
+                        <td style="padding: 6px; border-bottom: 1px solid {border_clr};">{item['desc']}</td>
+                        <td style="padding: 6px; border-bottom: 1px solid {border_clr}; text-align: right;">{item['qty']}</td>
+                        <td style="padding: 6px; border-bottom: 1px solid {border_clr}; text-align: right;">Rs. {item['rate']:,.2f}</td>
+                        <td style="padding: 6px; border-bottom: 1px solid {border_clr}; text-align: right;">Rs. {line_sub:,.2f}</td>
+                        <td style="padding: 6px; border-bottom: 1px solid {border_clr}; text-align: right;">{half_tax:.1f}%</td>
+                        <td style="padding: 6px; border-bottom: 1px solid {border_clr}; text-align: right;">{half_tax:.1f}%</td>
+                        <td style="padding: 6px; border-bottom: 1px solid {border_clr}; text-align: right;">Rs. {line_total:,.2f}</td>
                     </tr>
                 """
             else:
                 items_html += f"""
                     <tr>
-                        <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: center;">{idx}</td>
-                        <td style="padding: 8px; border-bottom: 1px solid {border_clr};">{item['desc']}</td>
-                        <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">{item['qty']}</td>
-                        <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">Rs. {item['rate']:,.2f}</td>
-                        <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">Rs. {line_sub:,.2f}</td>
-                        <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">{item['tax_rate']}%</td>
-                        <td style="padding: 8px; border-bottom: 1px solid {border_clr}; text-align: right;">Rs. {line_total:,.2f}</td>
+                        <td style="padding: 6px; border-bottom: 1px solid {border_clr}; text-align: center;">{idx}</td>
+                        <td style="padding: 6px; border-bottom: 1px solid {border_clr};">{item['desc']}</td>
+                        <td style="padding: 6px; border-bottom: 1px solid {border_clr}; text-align: right;">{item['qty']}</td>
+                        <td style="padding: 6px; border-bottom: 1px solid {border_clr}; text-align: right;">Rs. {item['rate']:,.2f}</td>
+                        <td style="padding: 6px; border-bottom: 1px solid {border_clr}; text-align: right;">Rs. {line_sub:,.2f}</td>
+                        <td style="padding: 6px; border-bottom: 1px solid {border_clr}; text-align: right;">{item['tax_rate']}%</td>
+                        <td style="padding: 6px; border-bottom: 1px solid {border_clr}; text-align: right;">Rs. {line_total:,.2f}</td>
                     </tr>
                 """
 
     if is_non_tax:
         tax_summary_html = f"""
-            <tr style='border-top: 2px solid {primary_color}; font-weight: bold; font-size: 14px; color: {primary_color};'>
-                <td style='padding: 8px; text-align: right;'>Grand Total:</td>
-                <td style='padding: 8px; text-align: right;'>Rs. {grand_total:,.2f}</td>
+            <tr style='border-top: 2px solid {primary_color}; font-weight: bold; font-size: 13px; color: {primary_color};'>
+                <td style='padding: 6px; text-align: right;'>Grand Total:</td>
+                <td style='padding: 6px; text-align: right;'>Rs. {grand_total:,.2f}</td>
             </tr>
         """
     else:
-        tax_summary_html = f"<tr><td style='padding: 6px; text-align: right;'>Subtotal:</td><td style='padding: 6px; text-align: right;'>Rs. {subtotal:,.2f}</td></tr>"
+        tax_summary_html = f"<tr><td style='padding: 5px; text-align: right;'>Subtotal:</td><td style='padding: 5px; text-align: right;'>Rs. {subtotal:,.2f}</td></tr>"
         if is_intra_state:
             half_tax_tot = tax_amt / 2
             tax_summary_html += f"""
-                <tr><td style='padding: 6px; text-align: right;'>CGST (Central Tax):</td><td style='padding: 6px; text-align: right;'>Rs. {half_tax_tot:,.2f}</td></tr>
-                <tr><td style='padding: 6px; text-align: right;'>SGST (State Tax):</td><td style='padding: 6px; text-align: right;'>Rs. {half_tax_tot:,.2f}</td></tr>
+                <tr><td style='padding: 5px; text-align: right;'>CGST (Central Tax):</td><td style='padding: 5px; text-align: right;'>Rs. {half_tax_tot:,.2f}</td></tr>
+                <tr><td style='padding: 5px; text-align: right;'>SGST (State Tax):</td><td style='padding: 5px; text-align: right;'>Rs. {half_tax_tot:,.2f}</td></tr>
             """
         else:
-            tax_summary_html += f"<tr><td style='padding: 6px; text-align: right;'>IGST (Integrated Tax):</td><td style='padding: 6px; text-align: right;'>Rs. {tax_amt:,.2f}</td></tr>"
+            tax_summary_html += f"<tr><td style='padding: 5px; text-align: right;'>IGST (Integrated Tax):</td><td style='padding: 5px; text-align: right;'>Rs. {tax_amt:,.2f}</td></tr>"
         
         tax_summary_html += f"""
-            <tr style='border-top: 2px solid {primary_color}; font-weight: bold; font-size: 14px; color: {primary_color};'>
-                <td style='padding: 8px; text-align: right;'>Grand Total:</td>
-                <td style='padding: 8px; text-align: right;'>Rs. {grand_total:,.2f}</td>
+            <tr style='border-top: 2px solid {primary_color}; font-weight: bold; font-size: 13px; color: {primary_color};'>
+                <td style='padding: 6px; text-align: right;'>Grand Total:</td>
+                <td style='padding: 6px; text-align: right;'>Rs. {grand_total:,.2f}</td>
             </tr>
         """
 
     if is_non_tax:
         header_headers = f"""
-            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: center;">#</th>
-            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: left;">Item / Service Description</th>
-            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Qty</th>
-            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Rate (Rs.)</th>
-            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Total Amount (Rs.)</th>
+            <th style="padding: 6px; background-color: {primary_color}; color: white; text-align: center;">#</th>
+            <th style="padding: 6px; background-color: {primary_color}; color: white; text-align: left;">Item / Service Description</th>
+            <th style="padding: 6px; background-color: {primary_color}; color: white; text-align: right;">Qty</th>
+            <th style="padding: 6px; background-color: {primary_color}; color: white; text-align: right;">Rate (Rs.)</th>
+            <th style="padding: 6px; background-color: {primary_color}; color: white; text-align: right;">Total Amount (Rs.)</th>
         """
     else:
         header_headers = f"""
-            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: center;">#</th>
-            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: left;">Item / Service Description</th>
-            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Qty</th>
-            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Rate (Rs.)</th>
-            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Amount (Rs.)</th>
-            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">CGST</th>
-            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">SGST</th>
-            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Total (Rs.)</th>
+            <th style="padding: 6px; background-color: {primary_color}; color: white; text-align: center;">#</th>
+            <th style="padding: 6px; background-color: {primary_color}; color: white; text-align: left;">Item / Service Description</th>
+            <th style="padding: 6px; background-color: {primary_color}; color: white; text-align: right;">Qty</th>
+            <th style="padding: 6px; background-color: {primary_color}; color: white; text-align: right;">Rate (Rs.)</th>
+            <th style="padding: 6px; background-color: {primary_color}; color: white; text-align: right;">Amount (Rs.)</th>
+            <th style="padding: 6px; background-color: {primary_color}; color: white; text-align: right;">CGST</th>
+            <th style="padding: 6px; background-color: {primary_color}; color: white; text-align: right;">SGST</th>
+            <th style="padding: 6px; background-color: {primary_color}; color: white; text-align: right;">Total (Rs.)</th>
         """ if is_intra_state else f"""
-            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: center;">#</th>
-            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: left;">Item / Service Description</th>
-            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Qty</th>
-            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Rate (Rs.)</th>
-            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Amount (Rs.)</th>
-            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">IGST</th>
-            <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Total (Rs.)</th>
+            <th style="padding: 6px; background-color: {primary_color}; color: white; text-align: center;">#</th>
+            <th style="padding: 6px; background-color: {primary_color}; color: white; text-align: left;">Item / Service Description</th>
+            <th style="padding: 6px; background-color: {primary_color}; color: white; text-align: right;">Qty</th>
+            <th style="padding: 6px; background-color: {primary_color}; color: white; text-align: right;">Rate (Rs.)</th>
+            <th style="padding: 6px; background-color: {primary_color}; color: white; text-align: right;">Amount (Rs.)</th>
+            <th style="padding: 6px; background-color: {primary_color}; color: white; text-align: right;">IGST</th>
+            <th style="padding: 6px; background-color: {primary_color}; color: white; text-align: right;">Total (Rs.)</th>
         """
 
     if is_delivery_challan:
@@ -622,9 +626,9 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
         footer_block_html = f"""
         <table style="width: 100%; border-collapse: collapse; background-color: {accent_bg}; border: 0.5px solid {border_clr}; position: relative; z-index: 1;">
             <tr>
-                <td style="padding: 10px; vertical-align: top; width: 100%;">
-                    <div style="font-size: 10px; font-weight: bold; color: {primary_color}; margin-bottom: 3px;">TERMS & CONDITIONS:</div>
-                    <div style="font-size: 10px; color: #475569; line-height: 1.4;">
+                <td style="padding: 8px; vertical-align: top; width: 100%;">
+                    <div style="font-size: 9.5px; font-weight: bold; color: {primary_color}; margin-bottom: 2px;">TERMS & CONDITIONS:</div>
+                    <div style="font-size: 9.5px; color: #475569; line-height: 1.35;">
                         {formatted_terms_html}
                     </div>
                 </td>
@@ -635,17 +639,17 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
         footer_block_html = f"""
         <table style="width: 100%; border-collapse: collapse; background-color: {accent_bg}; border: 0.5px solid {border_clr}; position: relative; z-index: 1;">
             <tr>
-                <td style="padding: 10px; vertical-align: top; width: 50%;">
-                    <div style="font-size: 10px; font-weight: bold; color: {primary_color}; margin-bottom: 3px;">PAYMENT / REMITTANCE DETAILS:</div>
-                    <div style="font-size: 10px; color: #475569; line-height: 1.4;">
+                <td style="padding: 8px; vertical-align: top; width: 50%;">
+                    <div style="font-size: 9.5px; font-weight: bold; color: {primary_color}; margin-bottom: 2px;">PAYMENT / REMITTANCE DETAILS:</div>
+                    <div style="font-size: 9.5px; color: #475569; line-height: 1.35;">
                         <b>Account Holder:</b> {acc_holder_str}<br/>
                         <b>Bank:</b> {bank_name_str} | <b>Account No:</b> {acc_num_str}<br/>
                         <b>IFSC:</b> {ifsc_str} | <b>UPI ID:</b> {upi_str}
                     </div>
                 </td>
-                <td style="padding: 10px; vertical-align: top; width: 50%; border-left: 0.5px solid {border_clr};">
-                    <div style="font-size: 10px; font-weight: bold; color: {primary_color}; margin-bottom: 3px;">TERMS & CONDITIONS:</div>
-                    <div style="font-size: 10px; color: #475569; line-height: 1.4;">
+                <td style="padding: 8px; vertical-align: top; width: 50%; border-left: 0.5px solid {border_clr};">
+                    <div style="font-size: 9.5px; font-weight: bold; color: {primary_color}; margin-bottom: 2px;">TERMS & CONDITIONS:</div>
+                    <div style="font-size: 9.5px; color: #475569; line-height: 1.35;">
                         {formatted_terms_html}
                     </div>
                 </td>
@@ -654,56 +658,56 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
         """
 
     html_content = f"""
-    <div style="position: relative; background-color: #ffffff; color: #1E293B; padding: 30px; font-family: Helvetica, Arial, sans-serif; border: 1px solid {border_clr}; border-radius: 6px; width: {p_width}; min-height: {p_height}; margin: auto; overflow: hidden; box-sizing: border-box;">
+    <div style="position: relative; background-color: #ffffff; color: #1E293B; padding: 25px; font-family: Helvetica, Arial, sans-serif; border: 1px solid {border_clr}; border-radius: 6px; width: {p_width}; min-height: {p_height}; margin: auto; overflow: hidden; box-sizing: border-box;">
         
         {text_watermark_html}
 
         <table style="width: 100%; border-collapse: collapse; position: relative; z-index: 1;">
             <tr>
                 <td style="vertical-align: top; width: 55%;">
-                    <div style="font-size: 18px; font-weight: bold; color: {primary_color};">{comp_name_str}</div>
-                    <div style="font-size: 11px; font-weight: bold; color: {secondary_color}; margin-top: 2px;">{comp_sub_str}</div>
-                    <div style="font-size: 11px; color: #475569; margin-top: 2px;">{comp_addr_str}</div>
-                    <div style="font-size: 11px; color: #475569;">Phone: {comp_phone_str} | Email: {comp_email_str}</div>
-                    <div style="font-size: 11px; color: #475569; margin-top: 2px;">{company_gstin_display}</div>
+                    <div style="font-size: 16px; font-weight: bold; color: {primary_color};">{comp_name_str}</div>
+                    <div style="font-size: 10px; font-weight: bold; color: {secondary_color}; margin-top: 2px;">{comp_sub_str}</div>
+                    <div style="font-size: 10px; color: #475569; margin-top: 2px;">{comp_addr_str}</div>
+                    <div style="font-size: 10px; color: #475569;">Phone: {comp_phone_str} | Email: {comp_email_str}</div>
+                    <div style="font-size: 10px; color: #475569; margin-top: 2px;">{company_gstin_display}</div>
                 </td>
                 <td style="vertical-align: top; text-align: right; width: 45%;">
                     {dup_banner}
-                    <div style="font-size: 20px; font-weight: bold; color: {secondary_color};">{doc_type.upper()}</div>
-                    <div style="font-size: 11px; color: #1E293B; margin-top: 6px;"><b>Document No:</b> {doc_num}</div>
-                    <div style="font-size: 11px; color: #1E293B;"><b>Date:</b> {doc_date}</div>
-                    <div style="font-size: 11px; color: #1E293B;"><b>Place of Supply:</b> {c_state_str}</div>
+                    <div style="font-size: 17px; font-weight: bold; color: {secondary_color};">{doc_type.upper()}</div>
+                    <div style="font-size: 10.5px; color: #1E293B; margin-top: 4px;"><b>Document No:</b> {doc_num}</div>
+                    <div style="font-size: 10.5px; color: #1E293B;"><b>Date:</b> {doc_date}</div>
+                    <div style="font-size: 10.5px; color: #1E293B;"><b>Place of Supply:</b> {c_state_str}</div>
                 </td>
             </tr>
         </table>
         
-        <hr style="border: none; border-top: 1.5px solid {primary_color}; margin: 15px 0; position: relative; z-index: 1;" />
+        <hr style="border: none; border-top: 1.2px solid {primary_color}; margin: 12px 0; position: relative; z-index: 1;" />
 
-        <table style="width: 100%; border-collapse: collapse; background-color: {accent_bg}; border: 0.5px solid {border_clr}; margin-bottom: 15px; position: relative; z-index: 1;">
+        <table style="width: 100%; border-collapse: collapse; background-color: {accent_bg}; border: 0.5px solid {border_clr}; margin-bottom: 12px; position: relative; z-index: 1;">
             <tr>
-                <td style="padding: 12px; vertical-align: top; width: 50%;">
-                    <div style="font-size: 11px; font-weight: bold; color: {primary_color}; margin-bottom: 4px;">BILLED / DELIVERED TO:</div>
-                    <div style="font-size: 12px; font-weight: bold; color: #0F172A;">{client_name}</div>
-                    <div style="font-size: 11px; color: #475569;">Contact: {client_phone if client_phone else 'N/A'}</div>
-                    <div style="font-size: 11px; color: #475569;">State: {c_state_str}</div>
-                    <div style="font-size: 11px; color: #475569;"><b>Client GSTIN:</b> {client_gstin if client_gstin and not is_non_tax else 'N/A'}</div>
+                <td style="padding: 10px; vertical-align: top; width: 50%;">
+                    <div style="font-size: 10px; font-weight: bold; color: {primary_color}; margin-bottom: 3px;">BILLED / DELIVERED TO:</div>
+                    <div style="font-size: 11px; font-weight: bold; color: #0F172A;">{client_name}</div>
+                    <div style="font-size: 10px; color: #475569;">Contact: {client_phone if client_phone else 'N/A'}</div>
+                    <div style="font-size: 10px; color: #475569;">State: {c_state_str}</div>
+                    <div style="font-size: 10px; color: #475569;"><b>Client GSTIN:</b> {client_gstin if client_gstin and not is_non_tax else 'N/A'}</div>
                 </td>
-                <td style="padding: 12px; vertical-align: top; width: 50%; border-left: 0.5px solid {border_clr};">
-                    <div style="font-size: 11px; font-weight: bold; color: {primary_color}; margin-bottom: 4px;">DOCUMENT REGIME & DETAILS:</div>
-                    <div style="font-size: 11px; color: #475569;">{tax_treatment_display}</div>
-                    <div style="font-size: 11px; color: #475569; margin-top: 2px;">Supplier Status: <b>Active Record</b></div>
+                <td style="padding: 10px; vertical-align: top; width: 50%; border-left: 0.5px solid {border_clr};">
+                    <div style="font-size: 10px; font-weight: bold; color: {primary_color}; margin-bottom: 3px;">DOCUMENT REGIME & DETAILS:</div>
+                    <div style="font-size: 10px; color: #475569;">{tax_treatment_display}</div>
+                    <div style="font-size: 10px; color: #475569; margin-top: 2px;">Supplier Status: <b>Active Record</b></div>
                 </td>
             </tr>
         </table>
 
-        <table style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 15px; position: relative; z-index: 1;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 10px; margin-bottom: 12px; position: relative; z-index: 1;">
             <thead>
                 <tr>{header_headers}</tr>
             </thead>
             <tbody>{items_html}</tbody>
         </table>
 
-        <table style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 20px; position: relative; z-index: 1;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 10.5px; margin-bottom: 15px; position: relative; z-index: 1;">
             <tr>
                 <td style="width: 60%;"></td>
                 <td style="width: 40%;">
@@ -736,10 +740,10 @@ if selected_theme != current_theme:
     save_theme_to_db(selected_theme)
     st.sidebar.success("Theme updated successfully!")
 
-# Added Page Size Selector in Sidebar for PDF Downloads & Live Previews
+# A4 set as the primary default page size
 selected_page_size = st.sidebar.selectbox(
     "📄 Print Page Size",
-    ["Letter", "A4", "Legal"],
+    ["A4", "Letter", "Legal"],
     index=0,
     help="Select the target page layout size for downloading PDFs and live previews."
 )
