@@ -244,7 +244,9 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
         Paragraph(f"<b>Place of Supply:</b> {client_state if client_state else comp_state_str}", ParagraphStyle('M3', parent=meta_label, alignment=2))
     ]
 
-    if "Delivery Challan" in doc_type:
+    is_delivery_challan = ("Delivery Challan" in doc_type)
+
+    if is_delivery_challan:
         company_gstin_line = "<b>Delivery Challan (Goods Transport / Movement)</b>"
     elif is_non_tax:
         company_gstin_line = "<b>Non-Tax Invoice (Bill of Supply / Receipt)</b>"
@@ -282,7 +284,7 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
         Paragraph(f"<b>Client GSTIN:</b> {client_gstin if client_gstin and not is_non_tax else 'N/A'}", meta_label)
     ]
     
-    if "Delivery Challan" in doc_type:
+    if is_delivery_challan:
         gst_info_p = [
             Paragraph("<b>CHALLAN DETAILS:</b>", ParagraphStyle('TReg', parent=styles['Normal'], fontSize=9, textColor=PRIMARY, fontName="Helvetica-Bold")),
             Paragraph("Document Purpose: <b>Delivery of Goods (Non-Tax Supply)</b>", meta_label),
@@ -406,24 +408,27 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
     story.append(summary_table)
     story.append(Spacer(1, 12))
 
-    bank_text = (
-        f"<b>Account Holder:</b> {acc_holder_str}<br/>"
-        f"<b>Bank:</b> {bank_name_str} | <b>Account No:</b> {acc_num_str}<br/>"
-        f"<b>IFSC:</b> {ifsc_str} | <b>UPI ID:</b> {upi_str}"
-    )
-
-    pay_p = [
-        Paragraph("<b>PAYMENT / REMITTANCE DETAILS:</b>", ParagraphStyle('PHead', parent=styles['Normal'], fontSize=8.5, textColor=PRIMARY, fontName="Helvetica-Bold")),
-        Spacer(1, 2), Paragraph(bank_text, meta_label)
-    ]
-    
     formatted_terms = terms_str.replace('\n', '<br/>')
     terms_p = [
         Paragraph("<b>TERMS & CONDITIONS:</b>", ParagraphStyle('THead', parent=styles['Normal'], fontSize=8.5, textColor=PRIMARY, fontName="Helvetica-Bold")),
         Spacer(1, 2), Paragraph(formatted_terms, meta_label)
     ]
 
-    footer_table = Table([[pay_p, terms_p]], colWidths=[280, 260])
+    if is_delivery_challan:
+        # For Delivery Challans, omit payment details and use full width for terms or instructions
+        footer_table = Table([[terms_p]], colWidths=[540])
+    else:
+        bank_text = (
+            f"<b>Account Holder:</b> {acc_holder_str}<br/>"
+            f"<b>Bank:</b> {bank_name_str} | <b>Account No:</b> {acc_num_str}<br/>"
+            f"<b>IFSC:</b> {ifsc_str} | <b>UPI ID:</b> {upi_str}"
+        )
+        pay_p = [
+            Paragraph("<b>PAYMENT / REMITTANCE DETAILS:</b>", ParagraphStyle('PHead', parent=styles['Normal'], fontSize=8.5, textColor=PRIMARY, fontName="Helvetica-Bold")),
+            Spacer(1, 2), Paragraph(bank_text, meta_label)
+        ]
+        footer_table = Table([[pay_p, terms_p]], colWidths=[280, 260])
+
     footer_table.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,-1), ACCENT_BG),
         ('PADDING', (0,0), (-1,-1), 8),
@@ -476,6 +481,7 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
 
     c_state_str = client_state if client_state else "Karnataka"
     is_intra_state = (c_state_str.strip().lower() == comp_state_str.lower())
+    is_delivery_challan = ("Delivery Challan" in doc_type)
     
     dup_banner = f"<div style='color: #DC2626; font-weight: bold; font-size: 16px; margin-bottom: 5px;'>*** DUPLICATE COPY ***</div>" if is_duplicate else ""
     
@@ -582,7 +588,7 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
             <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Total (Rs.)</th>
         """
 
-    if "Delivery Challan" in doc_type:
+    if is_delivery_challan:
         company_gstin_display = "<b>Delivery Challan (Goods Transport / Movement)</b>"
         tax_treatment_display = "Challan Purpose: <b>Goods Dispatch / Movement</b>"
     elif is_non_tax:
@@ -593,6 +599,41 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
         tax_treatment_display = f"Tax Treatment: <b>{'Intra-State GST (CGST + SGST)' if is_intra_state else 'Inter-State GST (IGST)'}</b>"
 
     formatted_terms_html = terms_str.replace('\n', '<br/>')
+
+    if is_delivery_challan:
+        footer_block_html = f"""
+        <table style="width: 100%; border-collapse: collapse; background-color: {accent_bg}; border: 0.5px solid {border_clr}; position: relative; z-index: 1;">
+            <tr>
+                <td style="padding: 10px; vertical-align: top; width: 100%;">
+                    <div style="font-size: 10px; font-weight: bold; color: {primary_color}; margin-bottom: 3px;">TERMS & CONDITIONS:</div>
+                    <div style="font-size: 10px; color: #475569; line-height: 1.4;">
+                        {formatted_terms_html}
+                    </div>
+                </td>
+            </tr>
+        </table>
+        """
+    else:
+        footer_block_html = f"""
+        <table style="width: 100%; border-collapse: collapse; background-color: {accent_bg}; border: 0.5px solid {border_clr}; position: relative; z-index: 1;">
+            <tr>
+                <td style="padding: 10px; vertical-align: top; width: 50%;">
+                    <div style="font-size: 10px; font-weight: bold; color: {primary_color}; margin-bottom: 3px;">PAYMENT / REMITTANCE DETAILS:</div>
+                    <div style="font-size: 10px; color: #475569; line-height: 1.4;">
+                        <b>Account Holder:</b> {acc_holder_str}<br/>
+                        <b>Bank:</b> {bank_name_str} | <b>Account No:</b> {acc_num_str}<br/>
+                        <b>IFSC:</b> {ifsc_str} | <b>UPI ID:</b> {upi_str}
+                    </div>
+                </td>
+                <td style="padding: 10px; vertical-align: top; width: 50%; border-left: 0.5px solid {border_clr};">
+                    <div style="font-size: 10px; font-weight: bold; color: {primary_color}; margin-bottom: 3px;">TERMS & CONDITIONS:</div>
+                    <div style="font-size: 10px; color: #475569; line-height: 1.4;">
+                        {formatted_terms_html}
+                    </div>
+                </td>
+            </tr>
+        </table>
+        """
 
     html_content = f"""
     <div style="position: relative; background-color: #ffffff; color: #1E293B; padding: 30px; font-family: Helvetica, Arial, sans-serif; border: 1px solid {border_clr}; border-radius: 6px; max-width: 800px; margin: auto; overflow: hidden;">
@@ -655,24 +696,7 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
             </tr>
         </table>
 
-        <table style="width: 100%; border-collapse: collapse; background-color: {accent_bg}; border: 0.5px solid {border_clr}; position: relative; z-index: 1;">
-            <tr>
-                <td style="padding: 10px; vertical-align: top; width: 50%;">
-                    <div style="font-size: 10px; font-weight: bold; color: {primary_color}; margin-bottom: 3px;">PAYMENT / REMITTANCE DETAILS:</div>
-                    <div style="font-size: 10px; color: #475569; line-height: 1.4;">
-                        <b>Account Holder:</b> {acc_holder_str}<br/>
-                        <b>Bank:</b> {bank_name_str} | <b>Account No:</b> {acc_num_str}<br/>
-                        <b>IFSC:</b> {ifsc_str} | <b>UPI ID:</b> {upi_str}
-                    </div>
-                </td>
-                <td style="padding: 10px; vertical-align: top; width: 50%; border-left: 0.5px solid {border_clr};">
-                    <div style="font-size: 10px; font-weight: bold; color: {primary_color}; margin-bottom: 3px;">TERMS & CONDITIONS:</div>
-                    <div style="font-size: 10px; color: #475569; line-height: 1.4;">
-                        {formatted_terms_html}
-                    </div>
-                </td>
-            </tr>
-        </table>
+        {footer_block_html}
     </div>
     """
     return html_content
@@ -829,7 +853,6 @@ if choice == "Create Document":
         )
         st.components.v1.html(preview_html, height=750, scrolling=True)
 
-        # SAVE BUTTON FIRST, THEN DOWNLOAD ORIGINAL AND DUPLICATE PDF BUTTONS[cite: 1]
         if st.button("💾 Save Document to Database"):
             items_json = json.dumps(st.session_state.item_list)
             cursor.execute('''
