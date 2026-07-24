@@ -44,8 +44,7 @@ if "active_sessions" not in st.session_state:
 try:
     name, authentication_status, username = authenticator.login('main', fields={'Form name': 'Login'})
 except Exception:
-    name, authentication_status, username = authenticator.login('main', key='nexus_login_form_unique'))
-
+    name, authentication_status, username = authenticator.login('main', key='nexus_login_form_unique')
 if authentication_status == False:
     st.error("Username/password is incorrect")
 elif authentication_status == None:
