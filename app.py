@@ -693,7 +693,6 @@ if choice == "Create Document":
     with col_c:
         doc_date = st.date_input("Date", date.today())
     with col_d:
-        # Bank account selection dropdown for document generation
         saved_banks = cursor.execute("SELECT id, label, bank_name, account_holder, account_number, ifsc_code, upi_id FROM bank_accounts").fetchall()
         bank_options = {f"{b[1]} ({b[2]} - {b[4][-4:]})": b[2:] for b in saved_banks}
         selected_bank_label = st.selectbox("Remittance Bank Account", list(bank_options.keys()))
@@ -849,18 +848,25 @@ elif choice == "Document History & Management":
                 
                 st.write(f"### Managing: {d_num} ({c_name})")
                 
-                preview_html = render_html_preview(
-                    d_type, d_num, c_name, c_phone, c_gstin, c_state, d_date, items, sub, tax, g_tot, is_duplicate=False, theme=selected_theme, is_non_tax=is_non_tax_doc
-                )
-                st.components.v1.html(preview_html, height=600, scrolling=True)
+                # --- EDIT INVOICE MODE TOGGLE ---
+                edit_mode_key = f"edit_mode_{selected_doc_id}"
+                if edit_mode_key not in st.session_state:
+                    st.session_state[edit_mode_key] = False
 
-                col_h1, col_h2 = st.columns(2)
-                with col_h1:
+                col_act1, col_act2, col_act3 = st.columns(3)
+                with col_act1:
+                    if st.button("✏️ Edit This Invoice", key=f"toggle_edit_{selected_doc_id}"):
+                        st.session_state[edit_mode_key] = not st.session_state[edit_mode_key]
+                        # Initialize editing session state items if turning on
+                        if st.session_state[edit_mode_key]:
+                            st.session_state[f"edit_items_{selected_doc_id}"] = list(items)
+                        st.rerun()
+                with col_act2:
                     pdf_buf = generate_pdf(
                         d_type, d_num, c_name, c_phone, c_gstin, c_state, d_date, items, sub, tax, g_tot, is_duplicate=False, theme=selected_theme, is_non_tax=is_non_tax_doc
                     )
                     st.download_button("📥 Download PDF", data=pdf_buf, file_name=f"{d_num}.pdf", mime="application/pdf", key=f"dl_{selected_doc_id}")
-                with col_h2:
+                with col_act3:
                     if st.button("🗑️ Move to Recycle Bin", key=f"del_{selected_doc_id}"):
                         cursor.execute('''
                             INSERT INTO deleted_documents (original_id, doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, subtotal, tax_amt, grand_total, status, items_json, deleted_at)
@@ -870,6 +876,74 @@ elif choice == "Document History & Management":
                         conn.commit()
                         st.success("Document moved to Recycle Bin successfully!")
                         st.rerun()
+
+                # --- IF EDIT MODE IS ACTIVE ---
+                if st.session_state[edit_mode_key]:
+                    st.info(f"Editing Document: **{d_num}**")
+                    with st.form(f"edit_form_{selected_doc_id}"):
+                        e_type = st.selectbox("Document Type", ["Tax Invoice", "Non-Tax Invoice / Bill of Supply", "Estimate / Quotation", "Proforma Invoice"], index=["Tax Invoice", "Non-Tax Invoice / Bill of Supply", "Estimate / Quotation", "Proforma Invoice"].index(d_type) if d_type in ["Tax Invoice", "Non-Tax Invoice / Bill of Supply", "Estimate / Quotation", "Proforma Invoice"] else 0)
+                        e_num = st.text_input("Document #", value=d_num)
+                        
+                        try:
+                            parsed_date = datetime.strptime(d_date, "%Y-%m-%d").date()
+                        except ValueError:
+                            parsed_date = date.today()
+                        e_date = st.date_input("Invoice Date", value=parsed_date)
+
+                        st.subheader("Edit Client Details")
+                        e_client_name = st.text_input("Client Name", value=c_name)
+                        e_client_phone = st.text_input("Client Phone", value=c_phone if c_phone else "")
+                        e_client_state = st.text_input("Client State", value=c_state if c_state else "Karnataka")
+                        e_client_gstin = st.text_input("Client GSTIN", value=c_gstin if c_gstin else "")
+
+                        st.subheader("Edit Line Items")
+                        current_edit_items = st.session_state.get(f"edit_items_{selected_doc_id}", list(items))
+                        
+                        updated_items_container = []
+                        for idx_it, itm in enumerate(current_edit_items):
+                            st.write(f"Item #{idx_it + 1}")
+                            col_ei1, col_ei2, col_ei3, col_ei4 = st.columns([3, 1, 1, 1])
+                            with col_ei1:
+                                ed_desc = st.text_input(f"Description {idx_it}", value=itm['desc'], key=f"ed_desc_{selected_doc_id}_{idx_it}")
+                            with col_ei2:
+                                ed_qty = st.number_input(f"Qty {idx_it}", min_value=1, value=int(itm['qty']), key=f"ed_qty_{selected_doc_id}_{idx_it}")
+                            with col_ei3:
+                                ed_rate = st.number_input(f"Rate {idx_it}", min_value=0.0, value=float(itm['rate']), step=500.0, key=f"ed_rate_{selected_doc_id}_{idx_it}")
+                            with col_ei4:
+                                ed_tax = st.number_input(f"Tax % {idx_it}", min_value=0.0, value=float(itm.get('tax_rate', 18.0)), key=f"ed_tax_{selected_doc_id}_{idx_it}")
+                            
+                            updated_items_container.append({
+                                "desc": ed_desc,
+                                "qty": ed_qty,
+                                "rate": ed_rate,
+                                "tax_rate": 0.0 if ("Non-Tax" in e_type) else ed_tax
+                            })
+
+                        save_edits_btn = st.form_submit_button("💾 Save Changes to Invoice")
+                        if save_edits_btn:
+                            is_new_non_tax = ("Non-Tax" in e_type)
+                            new_sub = sum(i['qty'] * i['rate'] for i in updated_items_container)
+                            new_tax_amt = 0.0 if is_new_non_tax else sum((i['qty'] * i['rate']) * (i['tax_rate'] / 100) for i in updated_items_container)
+                            new_g_tot = new_sub + new_tax_amt
+                            new_i_json = json.dumps(updated_items_container)
+
+                            cursor.execute('''
+                                UPDATE documents 
+                                SET doc_type = ?, doc_num = ?, client_name = ?, client_phone = ?, client_gstin = ?, client_state = ?, doc_date = ?, subtotal = ?, tax_amt = ?, grand_total = ?, items_json = ?
+                                WHERE id = ?
+                            ''', (e_type, e_num, e_client_name, e_client_phone, e_client_gstin, e_client_state, str(e_date), new_sub, new_tax_amt, new_g_tot, new_i_json, selected_doc_id))
+                            conn.commit()
+                            
+                            st.session_state[edit_mode_key] = False
+                            st.success("Invoice updated successfully!")
+                            st.rerun()
+
+                else:
+                    # Standard View Mode Preview
+                    preview_html = render_html_preview(
+                        d_type, d_num, c_name, c_phone, c_gstin, c_state, d_date, items, sub, tax, g_tot, is_duplicate=False, theme=selected_theme, is_non_tax=is_non_tax_doc
+                    )
+                    st.components.v1.html(preview_html, height=600, scrolling=True)
     else:
         st.info("No documents found in history yet.")
 
