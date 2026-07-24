@@ -513,34 +513,46 @@ elif authentication_status == True:
         client_gstin = cc3.text_input("Client GSTIN (Leave blank if unreg.)", client_gstin)
         client_state = st.selectbox("Place of Supply (State)", ["Andaman and Nicobar Islands", "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chandigarh", "Chhattisgarh", "Dadra and Nagar Haveli and Daman and Diu", "Delhi", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jammu and Kashmir", "Jharkhand", "Karnataka", "Kerala", "Ladakh", "Lakshadweep", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Puducherry", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal"], index=15 if not client_state else ["Andaman and Nicobar Islands", "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chandigarh", "Chhattisgarh", "Dadra and Nagar Haveli and Daman and Diu", "Delhi", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jammu and Kashmir", "Jharkhand", "Karnataka", "Kerala", "Ladakh", "Lakshadweep", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Puducherry", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal"].index(client_state))
 
-     st.subheader("Line Items")
+   st.subheader("Line Items")
         
-        # --- BULLETPROOF SESSION STATE GUARD ---
+        # Initialize session state safely
         if "items" not in st.session_state or not isinstance(st.session_state.items, list):
             st.session_state.items = [{'desc': '', 'qty': 1.0, 'rate': 0.0, 'tax_rate': 18.0}]
-            
+
+        # Temporary container to collect updated values safely without inline state mutation crashes
+        updated_items = []
+
         for i, item in enumerate(st.session_state.items):
             if not isinstance(item, dict):
-                st.session_state.items[i] = {'desc': '', 'qty': 1.0, 'rate': 0.0, 'tax_rate': 18.0}
-                item = st.session_state.items[i]
+                item = {'desc': '', 'qty': 1.0, 'rate': 0.0, 'tax_rate': 18.0}
 
-            i1, i2, i3, i4 = st.columns([4, 1, 1, 1])
+            cols = st.columns([4, 1, 1, 1])
             
-            with i1:
-                item['desc'] = st.text_input(f"Item {i+1} Description", value=item.get('desc', ''), key=f"desc_input_{i}")
-            with i2:
-                item['qty'] = st.number_input(f"Qty", min_value=0.1, value=float(item.get('qty', 1.0)), key=f"qty_input_{i}")
-            with i3:
-                item['rate'] = st.number_input(f"Rate", min_value=0.0, value=float(item.get('rate', 0.0)), key=f"rate_input_{i}")
+            with cols[0]:
+                desc = st.text_input(f"Item {i+1} Description", value=item.get('desc', ''), key=f"desc_input_{i}")
+            with cols[1]:
+                qty = st.number_input(f"Qty {i+1}", min_value=0.1, value=float(item.get('qty', 1.0)), key=f"qty_input_{i}")
+            with cols[2]:
+                rate = st.number_input(f"Rate {i+1}", min_value=0.0, value=float(item.get('rate', 0.0)), key=f"rate_input_{i}")
             
             if not is_non_tax:
                 current_tax = item.get('tax_rate', 18.0)
                 tax_options = [0.0, 5.0, 12.0, 18.0, 28.0]
                 tax_index = tax_options.index(current_tax) if current_tax in tax_options else 3
-                with i4:
-                    item['tax_rate'] = st.selectbox(f"GST %", tax_options, index=tax_index, key=f"tax_input_{i}")
+                with cols[3]:
+                    tax_rate = st.selectbox(f"GST % {i+1}", tax_options, index=tax_index, key=f"tax_input_{i}")
             else:
-                item['tax_rate'] = 0.0
+                tax_rate = 0.0
+
+            updated_items.append({
+                'desc': desc,
+                'qty': qty,
+                'rate': rate,
+                'tax_rate': tax_rate
+            })
+
+        # Sync back to session state cleanly after loop execution
+        st.session_state.items = updated_items
 
         if st.button("➕ Add Another Item"):
             st.session_state.items.append({'desc': '', 'qty': 1.0, 'rate': 0.0, 'tax_rate': 18.0 if not is_non_tax else 0.0})
