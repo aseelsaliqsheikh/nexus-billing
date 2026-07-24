@@ -477,11 +477,10 @@ elif authentication_status == True:
     st.title("🧾 Nexus Billing & Operations Suite")
     choice = st.radio("Navigation Menu", ["Create Document", "Document History & Management", "Client Directory", "Company & Invoice Settings", "Recycle Bin"], horizontal=True)
 
-  # --- 1. CREATE DOCUMENT ---
+    # --- 1. CREATE DOCUMENT ---
     if choice == "Create Document":
         st.header("📝 Create Billing Document")
         
-        # Ensure session state items list is always initialized properly
         if 'items' not in st.session_state or not isinstance(st.session_state.items, list):
             st.session_state.items = [{'desc': '', 'qty': 1.0, 'rate': 0.0, 'tax_rate': 18.0}]
 
