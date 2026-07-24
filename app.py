@@ -1,4 +1,78 @@
 import streamlit as st
+import streamlit_authenticator as stauth
+
+# --- USER CREDENTIALS & CONFIGURATION ---
+credentials = {
+    "usernames": {
+        "admin": {
+            "email": "admin@nexus.com",
+            "first_name": "Admin",
+            "last_name": "User",
+            "password": "your_secure_password_here" # Change this to your password
+        }
+    }
+}
+
+# Initialize Authenticator
+authenticator = stauth.Authenticate(
+    credentials,
+    cookie_name="nexus_billing_cookie",
+    key="nexus_secret_signature_key",
+    cookie_expiry_days=30
+)
+
+# --- TRACK ACTIVE SESSIONS GLOBALLY ---
+if "active_sessions" not in st.session_state:
+    st.session_state["active_sessions"] = set()
+
+# --- LOGIN SCREEN ---
+name, authentication_status, username = authenticator.login("Login", "main")
+
+if authentication_status == False:
+    st.error("Username/password is incorrect")
+elif authentication_status == None:
+    st.warning("Please enter your username and password")
+    
+    # Forgot Password Widget
+    try:
+        username_forgot_pw, email_forgot_pw, new_random_password = authenticator.forgot_password("Forgot password?")
+        if username_forgot_pw:
+            st.success("New password generated successfully!")
+            st.info(f"Your temporary password is: {new_random_password} (Save this to log in, then change it)")
+        elif username_forgot_pw == False:
+            st.error("Username not found")
+    except Exception as e:
+        st.error(e)
+
+elif authentication_status == True:
+    st.session_state["active_sessions"].add(st.session_state.get('token', 'active_user_session'))
+
+    # Sidebar Logout & Controls
+    with st.sidebar:
+        st.write(f"Welcome, **{name}**!")
+        authenticator.logout("Logout", "sidebar")
+        
+        # --- ADMIN ACTIVE SESSIONS & REMOTE TERMINATION ---
+        if username == "admin":
+            st.divider()
+            st.subheader("Admin Controls")
+            st.write(f"Active sessions tracked: {len(st.session_state['active_sessions'])}")
+            
+            if st.button("Terminate All Other Sessions"):
+                st.session_state["active_sessions"] = set()
+                st.success("All remote sessions cleared.")
+                st.rerun()
+
+        # Password Reset Option for Logged-in Users
+        with st.expander("Change Password"):
+            try:
+                if authenticator.reset_password(username, "Reset Password"):
+                    st.success("Password modified successfully!")
+            except Exception as e:
+                st.error(e)
+
+    # --- YOUR EXISTING APP CODE STARTS HERE BELOW ---
+import streamlit as st
 import pandas as pd
 import sqlite3
 import json
