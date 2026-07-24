@@ -23,8 +23,8 @@ credentials = {
             "email": "admin@nexus.com",
             "first_name": "Admin",
             "last_name": "User",
-            # Default password hash for "admin123"
-            "password": "$argon2id$v=19$m=65536,t=3,p=4$q9XYG6Hl... (or your hashed string)" 
+            # Default password for testing, update to a hashed password in production
+            "password": "your_secure_password_here" 
         }
     }
 }
@@ -42,9 +42,12 @@ if "active_sessions" not in st.session_state:
 
 # --- LOGIN SCREEN ---
 try:
-    name, authentication_status, username = authenticator.login('main', fields={'Form name': 'Login'})
-except Exception:
-    name, authentication_status, username = authenticator.login('main', key='nexus_login_form_unique')
+    authenticator.login()
+except Exception as e:
+    st.error(e)
+
+authentication_status = st.session_state.get("authentication_status")
+
 if authentication_status == False:
     st.error("Username/password is incorrect")
 elif authentication_status == None:
@@ -62,6 +65,10 @@ elif authentication_status == None:
         pass
 
 elif authentication_status == True:
+    # Retrieve user details from session state
+    name = st.session_state.get("name")
+    username = st.session_state.get("username")
+    
     st.session_state["active_sessions"].add(st.session_state.get('token', 'active_user_session'))
 
     # --- DATABASE SETUP & SCHEMA MIGRATION ---
@@ -106,29 +113,17 @@ elif authentication_status == True:
     conn.commit()
 
     # Schema migration safety checks
-    try:
-        cursor.execute("ALTER TABLE clients ADD COLUMN state TEXT DEFAULT 'Karnataka'")
-        conn.commit()
-    except sqlite3.OperationalError:
-        pass
+    try: cursor.execute("ALTER TABLE clients ADD COLUMN state TEXT DEFAULT 'Karnataka'"); conn.commit()
+    except sqlite3.OperationalError: pass
 
-    try:
-        cursor.execute("ALTER TABLE clients ADD COLUMN tax_id TEXT")
-        conn.commit()
-    except sqlite3.OperationalError:
-        pass
+    try: cursor.execute("ALTER TABLE clients ADD COLUMN tax_id TEXT"); conn.commit()
+    except sqlite3.OperationalError: pass
 
-    try:
-        cursor.execute("ALTER TABLE documents ADD COLUMN client_gstin TEXT")
-        conn.commit()
-    except sqlite3.OperationalError:
-        pass
+    try: cursor.execute("ALTER TABLE documents ADD COLUMN client_gstin TEXT"); conn.commit()
+    except sqlite3.OperationalError: pass
 
-    try:
-        cursor.execute("ALTER TABLE documents ADD COLUMN client_state TEXT DEFAULT 'Karnataka'")
-        conn.commit()
-    except sqlite3.OperationalError:
-        pass
+    try: cursor.execute("ALTER TABLE documents ADD COLUMN client_state TEXT DEFAULT 'Karnataka'"); conn.commit()
+    except sqlite3.OperationalError: pass
 
     existing_banks = cursor.execute("SELECT COUNT(*) FROM bank_accounts").fetchone()[0]
     if existing_banks == 0:
@@ -152,10 +147,8 @@ elif authentication_status == True:
     def get_setting(key, default_val):
         row = cursor.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
         if row and row[0] is not None:
-            try:
-                return row[0].decode('utf-8')
-            except Exception:
-                return default_val
+            try: return row[0].decode('utf-8')
+            except Exception: return default_val
         return default_val
 
     def save_setting(key, val):
@@ -170,15 +163,11 @@ elif authentication_status == True:
 
     def get_logo_from_db():
         row = cursor.execute("SELECT value FROM settings WHERE key = 'company_logo_blob'").fetchone()
-        if row and row[0]:
-            return io.BytesIO(row[0])
+        if row and row[0]: return io.BytesIO(row[0])
         return None
 
-    def save_theme_to_db(theme_name):
-        save_setting('invoice_theme', theme_name)
-
-    def get_theme_from_db():
-        return get_setting('invoice_theme', "Modern Minimalist (Clean Slate)")
+    def save_theme_to_db(theme_name): save_setting('invoice_theme', theme_name)
+    def get_theme_from_db(): return get_setting('invoice_theme', "Modern Minimalist (Clean Slate)")
 
     def draw_watermark(canvas, doc):
         try:
