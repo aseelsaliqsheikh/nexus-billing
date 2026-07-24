@@ -157,8 +157,8 @@ def draw_watermark(canvas, doc):
         canvas.setFont("Helvetica-Bold", 55)
         canvas.setFillColor(colors.HexColor("#0F172A"), alpha=0.08)
         
-        # Dynamically calculate the center of the current document page size
-        page_width, page_height = doc.pagesize
+        # Use doc.pagesize or fallback to current canvas page size to dynamically auto-adjust
+        page_width, page_height = getattr(doc, 'pagesize', (canvas._pagesize[0], canvas._pagesize[1]))
         
         watermark_text = get_setting('company_name', DEFAULT_SETTINGS['company_name']).upper()
         canvas.translate(page_width / 2.0, page_height / 2.0)
