@@ -693,7 +693,6 @@ if choice == "Create Document":
     with col_c:
         doc_date = st.date_input("Date", date.today())
     with col_d:
-        # Bank account selection dropdown for document generation
         saved_banks = cursor.execute("SELECT id, label, bank_name, account_holder, account_number, ifsc_code, upi_id FROM bank_accounts").fetchall()
         bank_options = {f"{b[1]} ({b[2]} - {b[4][-4:]})": b[2:] for b in saved_banks}
         selected_bank_label = st.selectbox("Remittance Bank Account", list(bank_options.keys()))
@@ -791,6 +790,16 @@ if choice == "Create Document":
         )
         st.components.v1.html(preview_html, height=750, scrolling=True)
 
+        # SAVE BUTTON FIRST, THEN DOWNLOAD ORIGINAL AND DUPLICATE PDF BUTTONS[cite: 1]
+        if st.button("💾 Save Document to Database"):
+            items_json = json.dumps(st.session_state.item_list)
+            cursor.execute('''
+                INSERT INTO documents (doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, subtotal, tax_amt, grand_total, status, items_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (doc_type, doc_num, client_name, client_phone, client_gstin, client_state, str(doc_date), subtotal, tax_amt, grand_total, "Issued", items_json))
+            conn.commit()
+            st.success("Document successfully saved to database!")
+
         col_p1, col_p2 = st.columns(2)
         with col_p1:
             pdf_buffer = generate_pdf(
@@ -816,15 +825,6 @@ if choice == "Create Document":
                 file_name=f"{doc_num}-DUPLICATE.pdf",
                 mime="application/pdf"
             )
-
-        if st.button("💾 Save Document to Database"):
-            items_json = json.dumps(st.session_state.item_list)
-            cursor.execute('''
-                INSERT INTO documents (doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, subtotal, tax_amt, grand_total, status, items_json)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (doc_type, doc_num, client_name, client_phone, client_gstin, client_state, str(doc_date), subtotal, tax_amt, grand_total, "Issued", items_json))
-            conn.commit()
-            st.success("Document successfully saved to database!")
     else:
         st.info("Please add at least one line item and fill in the client name to generate the preview and export options.")
 
