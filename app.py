@@ -484,6 +484,7 @@ elif authentication_status == True:
     if choice == "Create Document":
         st.header("📝 Create Billing Document")
         
+        # Safely enforce list type for session state items
         if "items" not in st.session_state or not isinstance(st.session_state.items, list) or len(st.session_state.items) == 0:
             st.session_state.items = [{'desc': '', 'qty': 1.0, 'rate': 0.0, 'tax_rate': 18.0}]
 
@@ -515,6 +516,7 @@ elif authentication_status == True:
 
         st.subheader("Line Items")
         
+        # Robust check to prevent method collision or corruption
         if "items" not in st.session_state or not isinstance(st.session_state.items, list):
             st.session_state.items = [{'desc': '', 'qty': 1.0, 'rate': 0.0, 'tax_rate': 18.0}]
 
@@ -552,6 +554,8 @@ elif authentication_status == True:
         st.session_state.items = temp_items
 
         if st.button("➕ Add Another Item"):
+            if not isinstance(st.session_state.items, list):
+                st.session_state.items = []
             st.session_state.items.append({'desc': '', 'qty': 1.0, 'rate': 0.0, 'tax_rate': 18.0 if not is_non_tax else 0.0})
             st.rerun()
 
