@@ -244,7 +244,13 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
         Paragraph(f"<b>Place of Supply:</b> {client_state if client_state else comp_state_str}", ParagraphStyle('M3', parent=meta_label, alignment=2))
     ]
 
-    company_gstin_line = f"<b>GSTIN:</b> {comp_gstin_str}" if not is_non_tax else "<b>Non-Tax Invoice (Bill of Supply / Receipt)</b>"
+    if "Delivery Challan" in doc_type:
+        company_gstin_line = "<b>Delivery Challan (Goods Transport / Movement)</b>"
+    elif is_non_tax:
+        company_gstin_line = "<b>Non-Tax Invoice (Bill of Supply / Receipt)</b>"
+    else:
+        company_gstin_line = f"<b>GSTIN:</b> {comp_gstin_str}"
+
     company_info_p = [
         Paragraph(comp_name_str, comp_title_style),
         Paragraph(f"<b>{comp_sub_str}</b>", comp_sub_style),
@@ -269,26 +275,33 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
     is_intra_state = (c_state_str.strip().lower() == comp_state_str.lower())
 
     client_p = [
-        Paragraph("<b>BILLED TO:</b>", ParagraphStyle('BTo', parent=styles['Normal'], fontSize=9, textColor=PRIMARY, fontName="Helvetica-Bold")),
+        Paragraph("<b>BILLED / DELIVERED TO:</b>", ParagraphStyle('BTo', parent=styles['Normal'], fontSize=9, textColor=PRIMARY, fontName="Helvetica-Bold")),
         Paragraph(f"<b>{client_name}</b>", ParagraphStyle('CName', parent=styles['Normal'], fontSize=10, textColor=TEXT_DARK, fontName="Helvetica-Bold")),
         Paragraph(f"Contact: {client_phone if client_phone else 'N/A'}", meta_label),
         Paragraph(f"State: {c_state_str}", meta_label),
         Paragraph(f"<b>Client GSTIN:</b> {client_gstin if client_gstin and not is_non_tax else 'N/A'}", meta_label)
     ]
     
-    if not is_non_tax:
+    if "Delivery Challan" in doc_type:
+        gst_info_p = [
+            Paragraph("<b>CHALLAN DETAILS:</b>", ParagraphStyle('TReg', parent=styles['Normal'], fontSize=9, textColor=PRIMARY, fontName="Helvetica-Bold")),
+            Paragraph("Document Purpose: <b>Delivery of Goods (Non-Tax Supply)</b>", meta_label),
+            Paragraph(f"Supplier Status: <b>{comp_name_str}</b>", meta_label),
+            Paragraph(f"Status: <b>Active Record</b>", meta_label)
+        ]
+    elif is_non_tax:
+        gst_info_p = [
+            Paragraph("<b>INVOICE DETAILS:</b>", ParagraphStyle('TReg', parent=styles['Normal'], fontSize=9, textColor=PRIMARY, fontName="Helvetica-Bold")),
+            Paragraph("Tax Type: <b>Non-Tax / Composition / Bill of Supply</b>", meta_label),
+            Paragraph(f"Supplier Status: <b>Unregistered / Non-Taxable Service</b>", meta_label),
+            Paragraph(f"Status: <b>Active Record</b>", meta_label)
+        ]
+    else:
         tax_type_str = "Intra-State GST (CGST + SGST)" if is_intra_state else "Inter-State GST (IGST)"
         gst_info_p = [
             Paragraph("<b>TAX REGIME & DETAILS:</b>", ParagraphStyle('TReg', parent=styles['Normal'], fontSize=9, textColor=PRIMARY, fontName="Helvetica-Bold")),
             Paragraph(f"Tax Treatment: <b>{tax_type_str}</b>", meta_label),
             Paragraph(f"Supplier GSTIN: <b>{comp_gstin_str}</b>", meta_label),
-            Paragraph(f"Status: <b>Active Record</b>", meta_label)
-        ]
-    else:
-        gst_info_p = [
-            Paragraph("<b>INVOICE DETAILS:</b>", ParagraphStyle('TReg', parent=styles['Normal'], fontSize=9, textColor=PRIMARY, fontName="Helvetica-Bold")),
-            Paragraph("Tax Type: <b>Non-Tax / Composition / Bill of Supply</b>", meta_label),
-            Paragraph(f"Supplier Status: <b>Unregistered / Non-Taxable Service</b>", meta_label),
             Paragraph(f"Status: <b>Active Record</b>", meta_label)
         ]
 
@@ -569,8 +582,15 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
             <th style="padding: 8px; background-color: {primary_color}; color: white; text-align: right;">Total (Rs.)</th>
         """
 
-    company_gstin_display = f"<b>GSTIN:</b> {comp_gstin_str}" if not is_non_tax else "<b>Non-Tax Invoice / Bill of Supply</b>"
-    tax_treatment_display = f"Tax Treatment: <b>{'Intra-State GST (CGST + SGST)' if is_intra_state else 'Inter-State GST (IGST)'}</b>" if not is_non_tax else "Tax Treatment: <b>Non-Taxable / Unregistered</b>"
+    if "Delivery Challan" in doc_type:
+        company_gstin_display = "<b>Delivery Challan (Goods Transport / Movement)</b>"
+        tax_treatment_display = "Challan Purpose: <b>Goods Dispatch / Movement</b>"
+    elif is_non_tax:
+        company_gstin_display = "<b>Non-Tax Invoice / Bill of Supply</b>"
+        tax_treatment_display = "Tax Treatment: <b>Non-Taxable / Unregistered</b>"
+    else:
+        company_gstin_display = f"<b>GSTIN:</b> {comp_gstin_str}"
+        tax_treatment_display = f"Tax Treatment: <b>{'Intra-State GST (CGST + SGST)' if is_intra_state else 'Inter-State GST (IGST)'}</b>"
 
     formatted_terms_html = terms_str.replace('\n', '<br/>')
 
@@ -603,14 +623,14 @@ def render_html_preview(doc_type, doc_num, client_name, client_phone, client_gst
         <table style="width: 100%; border-collapse: collapse; background-color: {accent_bg}; border: 0.5px solid {border_clr}; margin-bottom: 15px; position: relative; z-index: 1;">
             <tr>
                 <td style="padding: 12px; vertical-align: top; width: 50%;">
-                    <div style="font-size: 11px; font-weight: bold; color: {primary_color}; margin-bottom: 4px;">BILLED TO:</div>
+                    <div style="font-size: 11px; font-weight: bold; color: {primary_color}; margin-bottom: 4px;">BILLED / DELIVERED TO:</div>
                     <div style="font-size: 12px; font-weight: bold; color: #0F172A;">{client_name}</div>
                     <div style="font-size: 11px; color: #475569;">Contact: {client_phone if client_phone else 'N/A'}</div>
                     <div style="font-size: 11px; color: #475569;">State: {c_state_str}</div>
                     <div style="font-size: 11px; color: #475569;"><b>Client GSTIN:</b> {client_gstin if client_gstin and not is_non_tax else 'N/A'}</div>
                 </td>
                 <td style="padding: 12px; vertical-align: top; width: 50%; border-left: 0.5px solid {border_clr};">
-                    <div style="font-size: 11px; font-weight: bold; color: {primary_color}; margin-bottom: 4px;">INVOICE REGIME & DETAILS:</div>
+                    <div style="font-size: 11px; font-weight: bold; color: {primary_color}; margin-bottom: 4px;">DOCUMENT REGIME & DETAILS:</div>
                     <div style="font-size: 11px; color: #475569;">{tax_treatment_display}</div>
                     <div style="font-size: 11px; color: #475569; margin-top: 2px;">Supplier Status: <b>Active Record</b></div>
                 </td>
@@ -685,10 +705,29 @@ if choice == "Create Document":
     
     col_a, col_b, col_c, col_d = st.columns(4)
     with col_a:
-        doc_type = st.selectbox("Document Type", ["Tax Invoice", "Non-Tax Invoice / Bill of Supply", "Estimate / Quotation", "Proforma Invoice"])
+        doc_type = st.selectbox(
+            "Document Type", 
+            [
+                "Tax Invoice", 
+                "Non-Tax Invoice / Bill of Supply", 
+                "Estimate / Quotation", 
+                "Proforma Invoice", 
+                "Delivery Challan"
+            ]
+        )
     with col_b:
-        is_non_tax = ("Non-Tax" in doc_type)
-        doc_prefix = "NONTX" if is_non_tax else ("INV" if doc_type == "Tax Invoice" else ("EST" if "Estimate" in doc_type else "PRO"))
+        is_non_tax = ("Non-Tax" in doc_type) or ("Delivery Challan" in doc_type)
+        if "Tax Invoice" in doc_type:
+            doc_prefix = "INV"
+        elif "Non-Tax" in doc_type:
+            doc_prefix = "NONTX"
+        elif "Estimate" in doc_type:
+            doc_prefix = "EST"
+        elif "Delivery Challan" in doc_type:
+            doc_prefix = "CHL"
+        else:
+            doc_prefix = "PRO"
+            
         doc_num = st.text_input("Document #", f"{doc_prefix}-{date.today().strftime('%Y%m%d')}-01")
     with col_c:
         doc_date = st.date_input("Date", date.today())
@@ -845,7 +884,7 @@ elif choice == "Document History & Management":
             if row:
                 d_type, d_num, c_name, c_phone, c_gstin, c_state, d_date, sub, tax, g_tot, status, i_json = row
                 items = json.loads(i_json)
-                is_non_tax_doc = ("Non-Tax" in d_type)
+                is_non_tax_doc = ("Non-Tax" in d_type) or ("Delivery Challan" in d_type)
                 
                 st.write(f"### Managing: {d_num} ({c_name})")
                 
