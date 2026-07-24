@@ -460,13 +460,6 @@ elif authentication_status == True:
                 st.success("All remote sessions cleared.")
                 st.rerun()
 
-        with st.expander("Change Password"):
-            try:
-                if authenticator.reset_password(username, "Reset Password"):
-                    st.success("Password modified successfully!")
-            except Exception:
-                pass
-
         st.divider()
         st.subheader("🎨 Invoice Design & Branding")
         current_theme = get_theme_from_db()
@@ -497,205 +490,113 @@ elif authentication_status == True:
         with col_b:
             is_non_tax = ("Non-Tax" in doc_type)
             doc_prefix = "NONTX" if is_non_tax else ("INV" if doc_type == "Tax Invoice" else ("EST" if "Estimate" in doc_type else "PRO"))
-            doc_num = st.text_input("Document #", f"{doc_prefix}-{date.today().strftime('%Y%m%d')}-01")
-        with col_c:
-            doc_date = st.date_input("Date", date.today())
-        with col_d:
-            saved_banks = cursor.execute("SELECT id, label, bank_name, account_holder, account_number, ifsc_code, upi_id FROM bank_accounts").fetchall()
-            bank_options = {f"{b[1]} ({b[2]} - {b[4][-4:]})": b[2:] for b in saved_banks}
-            selected_bank_label = st.selectbox("Remittance Bank Account", list(bank_options.keys()))
-            selected_bank_tuple = bank_options[selected_bank_label]
+            doc_num = st.text_input("Document #", f"{doc_prefix}-{datetime.now().strftime('%Y%m%d%H%M')}")
+        with col_c: doc_date = st.date_input("Document Date", date.today())
+        with col_d: status = st.selectbox("Payment Status", ["Unpaid", "Paid", "Partially Paid", "Overdue", "Draft"]) if "Invoice" in doc_type else st.selectbox("Status", ["Draft", "Sent", "Accepted", "Rejected"])
 
         st.subheader("Client Information")
-        clients_db = cursor.execute("SELECT name, phone, state, tax_id FROM clients").fetchall()
-        saved_clients = [c[0] for c in clients_db]
+        clients_df = pd.read_sql("SELECT name FROM clients", conn)
+        client_names = ["-- New Client --"] + clients_df['name'].tolist()
+        sel_client = st.selectbox("Select Existing Client", client_names)
+
+        client_name, client_phone, client_email, client_addr, client_state, client_gstin = "", "", "", "", "Karnataka", ""
+        if sel_client != "-- New Client --":
+            c_row = cursor.execute("SELECT name, phone, email, address, state, tax_id FROM clients WHERE name=?", (sel_client,)).fetchone()
+            if c_row: client_name, client_phone, client_email, client_addr, client_state, client_gstin = c_row
+
+        cc1, cc2, cc3 = st.columns(3)
+        client_name = cc1.text_input("Client Name", client_name)
+        client_phone = cc2.text_input("Client Phone", client_phone)
+        client_gstin = cc3.text_input("Client GSTIN (Leave blank if unreg.)", client_gstin)
+        client_state = st.selectbox("Place of Supply (State)", ["Andaman and Nicobar Islands", "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chandigarh", "Chhattisgarh", "Dadra and Nagar Haveli and Daman and Diu", "Delhi", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jammu and Kashmir", "Jharkhand", "Karnataka", "Kerala", "Ladakh", "Lakshadweep", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Puducherry", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal"], index=15 if not client_state else ["Andaman and Nicobar Islands", "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chandigarh", "Chhattisgarh", "Dadra and Nagar Haveli and Daman and Diu", "Delhi", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jammu and Kashmir", "Jharkhand", "Karnataka", "Kerala", "Ladakh", "Lakshadweep", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Puducherry", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal"].index(client_state))
+
+        st.subheader("Line Items")
+        if 'items' not in st.session_state: st.session_state.items = [{'desc': '', 'qty': 1.0, 'rate': 0.0, 'tax_rate': 18.0 if not is_non_tax else 0.0}]
         
-        col_c1, col_c2 = st.columns(2)
-        with col_c1:
-            client_mode = st.radio("Client Selection", ["Existing Client", "New Client (Quick Add)"], horizontal=True)
-            if client_mode == "Existing Client" and saved_clients:
-                client_name = st.selectbox("Select Client", saved_clients)
-                selected_client_tuple = next((c for c in clients_db if c[0] == client_name), ("", "", "Karnataka", ""))
-                client_phone, client_state, client_gstin = selected_client_tuple[1], selected_client_tuple[2], selected_client_tuple[3]
+        for i, item in enumerate(st.session_state.items):
+            i1, i2, i3, i4 = st.columns([4, 1, 1, 1])
+            with i1: item['desc'] = st.text_input(f"Item {i+1} Description", item['desc'], key=f"desc_{i}")
+            with i2: item['qty'] = st.number_input(f"Qty", min_value=0.1, value=float(item['qty']), key=f"qty_{i}")
+            with i3: item['rate'] = st.number_input(f"Rate", min_value=0.0, value=float(item['rate']), key=f"rate_{i}")
+            if not is_non_tax:
+                with i4: item['tax_rate'] = st.selectbox(f"GST %", [0.0, 5.0, 12.0, 18.0, 28.0], index=[0.0, 5.0, 12.0, 18.0, 28.0].index(item.get('tax_rate', 18.0)), key=f"tax_{i}")
             else:
-                client_name = st.text_input("Client Name / Business Name")
-                client_phone = st.text_input("Mobile Number")
-                client_state = st.text_input("Client State", value="Karnataka")
-                client_gstin = st.text_input("Client GSTIN (Optional)")
-        
-        st.divider()
-        st.subheader("📦 Line Items")
-        if "item_list" not in st.session_state:
-            st.session_state.item_list = []
+                item['tax_rate'] = 0.0
 
-        with st.form("add_item_form", clear_on_submit=True):
-            if is_non_tax:
-                f_col1, f_col2, f_col3 = st.columns([3, 1, 1])
-                with f_col1: item_desc = st.text_input("Item Description / Service Name")
-                with f_col2: item_qty = st.number_input("Qty / Days", min_value=1, value=1)
-                with f_col3: item_rate = st.number_input("Rate (₹)", min_value=0.0, step=500.0)
-                item_tax = 0.0
-            else:
-                f_col1, f_col2, f_col3, f_col4 = st.columns([3, 1, 1, 1])
-                with f_col1: item_desc = st.text_input("Item Description / Service Name")
-                with f_col2: item_qty = st.number_input("Qty / Days", min_value=1, value=1)
-                with f_col3: item_rate = st.number_input("Rate (₹)", min_value=0.0, step=500.0)
-                with f_col4: item_tax = st.number_input("GST Tax %", min_value=0.0, value=18.0)
-            
-            if st.form_submit_button("+ Add Line Item") and item_desc:
-                st.session_state.item_list.append({"desc": item_desc, "qty": item_qty, "rate": item_rate, "tax_rate": item_tax})
-                st.success(f"Added '{item_desc}'!")
+        if st.button("➕ Add Another Item"):
+            st.session_state.items.append({'desc': '', 'qty': 1.0, 'rate': 0.0, 'tax_rate': 18.0 if not is_non_tax else 0.0})
+            st.rerun()
 
-        if st.session_state.item_list:
-            for idx, item in enumerate(st.session_state.item_list):
-                line_sub = item['qty'] * item['rate']
-                cols = st.columns([4, 1])
-                with cols[0]:
-                    st.write(f"**{idx+1}. {item['desc']}** | Qty: {item['qty']} × ₹{item['rate']:,.2f} = **₹{line_sub:,.2f}**")
-                with cols[1]:
-                    if st.button("🗑️ Remove", key=f"remove_item_{idx}"):
-                        st.session_state.item_list.pop(idx)
-                        st.rerun()
-
-        subtotal = sum(i['qty'] * i['rate'] for i in st.session_state.item_list)
-        tax_amt = 0.0 if is_non_tax else sum((i['qty'] * i['rate']) * (i['tax_rate'] / 100) for i in st.session_state.item_list)
+        subtotal = sum(i['qty'] * i['rate'] for i in st.session_state.items)
+        if not is_non_tax: tax_amt = sum((i['qty'] * i['rate']) * (i['tax_rate']/100) for i in st.session_state.items)
+        else: tax_amt = 0.0
         grand_total = subtotal + tax_amt
 
-        if st.session_state.item_list and client_name:
-            st.divider()
-            preview_html = render_html_preview(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, str(doc_date), st.session_state.item_list, subtotal, tax_amt, grand_total, bank_details=selected_bank_tuple, theme=selected_theme, is_non_tax=is_non_tax)
-            st.components.v1.html(preview_html, height=750, scrolling=True)
+        col_tot1, col_tot2 = st.columns(2)
+        with col_tot1:
+            st.metric("Subtotal", f"Rs. {subtotal:,.2f}")
+            if not is_non_tax: st.metric("Total Tax", f"Rs. {tax_amt:,.2f}")
+        with col_tot2:
+            st.metric("Grand Total", f"Rs. {grand_total:,.2f}")
 
-            col_p1, col_p2 = st.columns(2)
-            with col_p1:
-                pdf_buffer = generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, str(doc_date), st.session_state.item_list, subtotal, tax_amt, grand_total, bank_details=selected_bank_tuple, theme=selected_theme, is_non_tax=is_non_tax)
-                st.download_button("📥 Download Original PDF", data=pdf_buffer, file_name=f"{doc_num}.pdf", mime="application/pdf")
-            with col_p2:
-                pdf_dup_buffer = generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, str(doc_date), st.session_state.item_list, subtotal, tax_amt, grand_total, bank_details=selected_bank_tuple, is_duplicate=True, theme=selected_theme, is_non_tax=is_non_tax)
-                st.download_button("📥 Download Duplicate Copy PDF", data=pdf_dup_buffer, file_name=f"{doc_num}-DUPLICATE.pdf", mime="application/pdf")
+        if st.button("Preview HTML & Layout"):
+            st.markdown(render_html_preview(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, st.session_state.items, subtotal, tax_amt, grand_total, is_duplicate=False, theme=get_theme_from_db(), is_non_tax=is_non_tax), unsafe_allow_html=True)
 
-            if st.button("💾 Save Document to Database"):
-                cursor.execute('INSERT INTO documents (doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, subtotal, tax_amt, grand_total, status, items_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', 
-                               (doc_type, doc_num, client_name, client_phone, client_gstin, client_state, str(doc_date), subtotal, tax_amt, grand_total, "Issued", json.dumps(st.session_state.item_list)))
+        if st.button("💾 Save & Generate Final PDF"):
+            if client_name and len(st.session_state.items) > 0 and st.session_state.items[0]['desc']:
+                if sel_client == "-- New Client --":
+                    cursor.execute("INSERT INTO clients (name, phone, email, address, state, tax_id) VALUES (?, ?, ?, ?, ?, ?)", (client_name, client_phone, client_email, client_addr, client_state, client_gstin))
+                else:
+                    cursor.execute("UPDATE clients SET phone=?, email=?, address=?, state=?, tax_id=? WHERE name=?", (client_phone, client_email, client_addr, client_state, client_gstin, client_name))
+                
+                items_j = json.dumps(st.session_state.items)
+                cursor.execute('''INSERT INTO documents (doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, subtotal, tax_amt, grand_total, status, items_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (doc_type, doc_num, client_name, client_phone, client_gstin, client_state, str(doc_date), subtotal, tax_amt, grand_total, status, items_j))
                 conn.commit()
-                st.success("Document successfully saved!")
+                st.success("Document Saved to Database!")
 
-    # --- 2. DOCUMENT HISTORY & MANAGEMENT ---
+                pdf_buf = generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, str(doc_date), st.session_state.items, subtotal, tax_amt, grand_total, theme=get_theme_from_db(), is_non_tax=is_non_tax)
+                st.download_button(label="📥 Download Original PDF", data=pdf_buf, file_name=f"{doc_num}.pdf", mime="application/pdf")
+                st.session_state.items = [{'desc': '', 'qty': 1.0, 'rate': 0.0, 'tax_rate': 18.0 if not is_non_tax else 0.0}]
+            else:
+                st.error("Please enter Client Name and at least one item description.")
+
+    # --- 2. DOCUMENT HISTORY ---
     elif choice == "Document History & Management":
-        st.header("📂 Document History & Management")
-        docs = cursor.execute("SELECT id, doc_type, doc_num, client_name, doc_date, grand_total, status FROM documents").fetchall()
-        if docs:
-            st.dataframe(pd.DataFrame(docs, columns=["ID", "Type", "Doc #", "Client", "Date", "Grand Total (₹)", "Status"]), use_container_width=True)
-            selected_doc_id = st.selectbox("Select Document ID for Actions", [d[0] for d in docs])
-            
-            if selected_doc_id:
-                row = cursor.execute("SELECT doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, subtotal, tax_amt, grand_total, status, items_json FROM documents WHERE id = ?", (selected_doc_id,)).fetchone()
-                if row:
-                    d_type, d_num, c_name, c_phone, c_gstin, c_state, d_date, sub, tax, g_tot, status, i_json = row
-                    items = json.loads(i_json)
-                    is_non_tax_doc = ("Non-Tax" in d_type)
-                    
-                    edit_mode_key = f"edit_mode_{selected_doc_id}"
-                    if edit_mode_key not in st.session_state: st.session_state[edit_mode_key] = False
+        st.header("📂 Document History")
+        docs = pd.read_sql("SELECT id, doc_type, doc_num, doc_date, client_name, grand_total, status FROM documents ORDER BY id DESC", conn)
+        if not docs.empty:
+            st.dataframe(docs, use_container_width=True)
+            sel_id = st.selectbox("Select Document ID to Manage", docs['id'].tolist())
+            d_row = cursor.execute("SELECT doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, subtotal, tax_amt, grand_total, status, items_json FROM documents WHERE id=?", (sel_id,)).fetchone()
+            if d_row:
+                st.markdown(f"**Selected:** {d_row[1]} for {d_row[2]}")
+                r_type, r_num, r_cname, r_cphone, r_cgstin, r_cstate, r_date, r_sub, r_tax, r_grand, r_stat, r_itemsj = d_row
+                is_ntx = ("Non-Tax" in r_type)
 
-                    col_act1, col_act2, col_act3 = st.columns(3)
-                    with col_act1:
-                        if st.button("✏️ Edit This Invoice", key=f"toggle_edit_{selected_doc_id}"):
-                            st.session_state[edit_mode_key] = not st.session_state[edit_mode_key]
-                            st.rerun()
-                    with col_act2:
-                        pdf_buf = generate_pdf(d_type, d_num, c_name, c_phone, c_gstin, c_state, d_date, items, sub, tax, g_tot, theme=selected_theme, is_non_tax=is_non_tax_doc)
-                        st.download_button("📥 Download PDF", data=pdf_buf, file_name=f"{d_num}.pdf", mime="application/pdf", key=f"dl_{selected_doc_id}")
-                    with col_act3:
-                        if st.button("🗑️ Move to Recycle Bin", key=f"del_{selected_doc_id}"):
-                            cursor.execute('INSERT INTO deleted_documents (original_id, doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, subtotal, tax_amt, grand_total, status, items_json, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', 
-                                           (selected_doc_id, d_type, d_num, c_name, c_phone, c_gstin, c_state, d_date, sub, tax, g_tot, status, i_json, str(datetime.now())))
-                            cursor.execute("DELETE FROM documents WHERE id = ?", (selected_doc_id,))
-                            conn.commit()
-                            st.success("Moved to Recycle Bin!")
-                            st.rerun()
-
-                    if st.session_state[edit_mode_key]:
-                        with st.form(f"edit_form_{selected_doc_id}"):
-                            e_type = st.selectbox("Document Type", ["Tax Invoice", "Non-Tax Invoice / Bill of Supply", "Estimate / Quotation", "Proforma Invoice"])
-                            e_num = st.text_input("Document #", value=d_num)
-                            e_date = st.date_input("Invoice Date", value=datetime.strptime(d_date, "%Y-%m-%d").date() if d_date else date.today())
-                            e_client_name = st.text_input("Client Name", value=c_name)
-                            e_client_phone = st.text_input("Client Phone", value=c_phone if c_phone else "")
-                            e_client_state = st.text_input("Client State", value=c_state if c_state else "Karnataka")
-                            e_client_gstin = st.text_input("Client GSTIN", value=c_gstin if c_gstin else "")
-
-                            updated_items_container = []
-                            for idx_it, itm in enumerate(items):
-                                col_ei1, col_ei2, col_ei3, col_ei4 = st.columns([3, 1, 1, 1])
-                                with col_ei1: ed_desc = st.text_input(f"Desc {idx_it}", value=itm['desc'], key=f"ed_desc_{selected_doc_id}_{idx_it}")
-                                with col_ei2: ed_qty = st.number_input(f"Qty {idx_it}", min_value=1, value=int(itm['qty']), key=f"ed_qty_{selected_doc_id}_{idx_it}")
-                                with col_ei3: ed_rate = st.number_input(f"Rate {idx_it}", min_value=0.0, value=float(itm['rate']), key=f"ed_rate_{selected_doc_id}_{idx_it}")
-                                with col_ei4: ed_tax = st.number_input(f"Tax % {idx_it}", min_value=0.0, value=float(itm.get('tax_rate', 18.0)), key=f"ed_tax_{selected_doc_id}_{idx_it}")
-                                updated_items_container.append({"desc": ed_desc, "qty": ed_qty, "rate": ed_rate, "tax_rate": 0.0 if ("Non-Tax" in e_type) else ed_tax})
-
-                            if st.form_submit_button("💾 Save Changes to Invoice"):
-                                is_new_non_tax = ("Non-Tax" in e_type)
-                                new_sub = sum(i['qty'] * i['rate'] for i in updated_items_container)
-                                new_tax_amt = 0.0 if is_new_non_tax else sum((i['qty'] * i['rate']) * (i['tax_rate'] / 100) for i in updated_items_container)
-                                cursor.execute('UPDATE documents SET doc_type = ?, doc_num = ?, client_name = ?, client_phone = ?, client_gstin = ?, client_state = ?, doc_date = ?, subtotal = ?, tax_amt = ?, grand_total = ?, items_json = ? WHERE id = ?', 
-                                               (e_type, e_num, e_client_name, e_client_phone, e_client_gstin, e_client_state, str(e_date), new_sub, new_tax_amt, new_sub + new_tax_amt, json.dumps(updated_items_container), selected_doc_id))
-                                conn.commit()
-                                st.session_state[edit_mode_key] = False
-                                st.success("Invoice updated successfully!")
-                                st.rerun()
-                    else:
-                        st.components.v1.html(render_html_preview(d_type, d_num, c_name, c_phone, c_gstin, c_state, d_date, items, sub, tax, g_tot, theme=selected_theme, is_non_tax=is_non_tax_doc), height=600, scrolling=True)
-        else:
-            st.info("No documents found.")
-
-    # --- 3. CLIENT DIRECTORY ---
-    elif choice == "Client Directory":
-        st.header("📇 Client Directory")
-        with st.form("new_client_form", clear_on_submit=True):
-            nc_name, nc_phone, nc_email, nc_address, nc_state, nc_tax = st.text_input("Name"), st.text_input("Phone"), st.text_input("Email"), st.text_area("Address"), st.text_input("State", value="Karnataka"), st.text_input("GSTIN")
-            if st.form_submit_button("Save Client") and nc_name:
-                cursor.execute("INSERT INTO clients (name, phone, email, address, state, tax_id) VALUES (?, ?, ?, ?, ?, ?)", (nc_name, nc_phone, nc_email, nc_address, nc_state, nc_tax))
-                conn.commit()
-                st.success("Client added!")
-                st.rerun()
-        all_clients = cursor.execute("SELECT id, name, phone, email, state, tax_id FROM clients").fetchall()
-        if all_clients: st.dataframe(pd.DataFrame(all_clients, columns=["ID", "Name", "Phone", "Email", "State", "GSTIN"]), use_container_width=True)
-
-    # --- 4. COMPANY & INVOICE SETTINGS ---
-    elif choice == "Company & Invoice Settings":
-        st.header("⚙️ Company Settings & Bank Accounts")
-        with st.form("company_settings_form"):
-            cfg_name, cfg_sub, cfg_addr = st.text_input("Company Name", value=get_setting('company_name', DEFAULT_SETTINGS['company_name'])), st.text_input("Subtitle", value=get_setting('company_sub', DEFAULT_SETTINGS['company_sub'])), st.text_input("Address", value=get_setting('company_addr', DEFAULT_SETTINGS['company_addr']))
-            cfg_state, cfg_phone, cfg_email, cfg_gstin = st.text_input("State", value=get_setting('company_state', DEFAULT_SETTINGS['company_state'])), st.text_input("Phone", value=get_setting('company_phone', DEFAULT_SETTINGS['company_phone'])), st.text_input("Email", value=get_setting('company_email', DEFAULT_SETTINGS['company_email'])), st.text_input("GSTIN", value=get_setting('company_gstin', DEFAULT_SETTINGS['company_gstin']))
-            cfg_terms = st.text_area("Terms & Conditions", value=get_setting('terms_conditions', DEFAULT_SETTINGS['terms_conditions']))
-            if st.form_submit_button("💾 Save Settings"):
-                for k, v in [('company_name', cfg_name), ('company_sub', cfg_sub), ('company_addr', cfg_addr), ('company_state', cfg_state), ('company_phone', cfg_phone), ('company_email', cfg_email), ('company_gstin', cfg_gstin), ('terms_conditions', cfg_terms)]:
-                    save_setting(k, v)
-                st.success("Settings saved!")
-
-    # --- 5. RECYCLE BIN ---
-    elif choice == "Recycle Bin":
-        st.header("🗑️ Recycle Bin")
-        del_docs = cursor.execute("SELECT bin_id, doc_num, client_name, grand_total, deleted_at FROM deleted_documents").fetchall()
-        if del_docs:
-            st.dataframe(pd.DataFrame(del_docs, columns=["Bin ID", "Doc #", "Client", "Grand Total", "Deleted At"]), use_container_width=True)
-            sel_bin = st.selectbox("Select Bin ID", [d[0] for d in del_docs])
-            c1, c2 = st.columns(2)
-            with c1:
-                if st.button("♻️ Restore"):
-                    row = cursor.execute("SELECT original_id, doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, subtotal, tax_amt, grand_total, status, items_json FROM deleted_documents WHERE bin_id = ?", (sel_bin,)).fetchone()
-                    if row:
-                        cursor.execute('INSERT INTO documents (id, doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, subtotal, tax_amt, grand_total, status, items_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', row)
-                        cursor.execute("DELETE FROM deleted_documents WHERE bin_id = ?", (sel_bin,))
+                co1, co2 = st.columns(2)
+                with co1:
+                    new_stat = st.selectbox("Update Status", ["Unpaid", "Paid", "Partially Paid", "Overdue", "Draft", "Sent", "Accepted", "Rejected"], index=["Unpaid", "Paid", "Partially Paid", "Overdue", "Draft", "Sent", "Accepted", "Rejected"].index(r_stat) if r_stat in ["Unpaid", "Paid", "Partially Paid", "Overdue", "Draft", "Sent", "Accepted", "Rejected"] else 0)
+                    if st.button("Update Status"):
+                        cursor.execute("UPDATE documents SET status=? WHERE id=?", (new_stat, sel_id))
                         conn.commit()
-                        st.success("Restored successfully!")
-                        st.rerun()
-            with c2:
-                if st.button("🔥 Purge"):
-                    cursor.execute("DELETE FROM deleted_documents WHERE bin_id = ?", (sel_bin,))
-                    conn.commit()
-                    st.success("Permanently deleted!")
-                    st.rerun()
-        else:
-            st.info("Recycle bin is empty.")
+                        st.success("Status updated!"); st.rerun()
+                with co2:
+                    if st.button("🗑️ Move to Recycle Bin", type="primary"):
+                        cursor.execute("INSERT INTO deleted_documents (original_id, doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, subtotal, tax_amt, grand_total, status, items_json, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (sel_id, r_type, r_num, r_cname, r_cphone, r_cgstin, r_cstate, r_date, r_sub, r_tax, r_grand, r_stat, r_itemsj, str(datetime.now())))
+                        cursor.execute("DELETE FROM documents WHERE id=?", (sel_id,))
+                        conn.commit()
+                        st.warning("Document moved to Recycle Bin!"); st.rerun()
+
+                r_items = json.loads(r_itemsj)
+                st.markdown("### Generate PDF")
+                p1, p2 = st.columns(2)
+                with p1:
+                    dup_pdf_buf = generate_pdf(r_type, r_num, r_cname, r_cphone, r_cgstin, r_cstate, r_date, r_items, r_sub, r_tax, r_grand, is_duplicate=False, theme=get_theme_from_db(), is_non_tax=I am ready to write the exact, copy-paste code for you — but you didn't mention what we are building! 
+
+Whether you need a Python script to automate file organization for your *Little Noor TV* videos, a VBA macro to accurately calculate staff attendance for your event management spreadsheets, or something else entirely, I just need the parameters.
+
+Tell me:
+*   **What exactly should the code do?**
+*   **What programming language or platform do you need it in?** 
+
+Drop the details, and I will generate the complete, ready-to-run code for you.
