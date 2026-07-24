@@ -518,16 +518,17 @@ elif authentication_status == True:
 
         st.subheader("Line Items")
         
-        if "items" not in st.session_state or not isinstance(st.session_state.items, list):
+        # Ensure st.session_state.items always exists and is a valid list
+        if "items" not in st.session_state or not isinstance(st.session_state.items, list) or len(st.session_state.items) == 0:
             st.session_state.items = [{'desc': '', 'qty': 1.0, 'rate': 0.0, 'tax_rate': 18.0}]
-            
+
         for i, item in enumerate(st.session_state.items):
             i1, i2, i3, i4 = st.columns([4, 1, 1, 1])
             with i1: item['desc'] = st.text_input(f"Item {i+1} Description", item.get('desc', ''), key=f"desc_{i}")
             with i2: item['qty'] = st.number_input(f"Qty", min_value=0.1, value=float(item.get('qty', 1.0)), key=f"qty_{i}")
             with i3: item['rate'] = st.number_input(f"Rate", min_value=0.0, value=float(item.get('rate', 0.0)), key=f"rate_{i}")
             if not is_non_tax:
-                with i4: item['tax_rate'] = st.selectbox(f"GST %", [0.0, 5.0, 12.0, 18.0, 28.0], index=[0.0, 5.0, 12.0, 18.0, 28.0].index(item.get('tax_rate', 18.0)) if item.get('tax_rate', 18.0) in [0.0, 5.0, 12.0, 18.0, 28.0] else 3, key=f"tax_{i}")
+                with i4: item['tax_rate'] = st.selectbox(f"GST %", [0.0, 5.0, 12.0, 18.0, 28.0], index=0, key=f"tax_{i}")
             else:
                 item['tax_rate'] = 0.0
 
