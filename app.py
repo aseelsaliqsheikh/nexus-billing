@@ -15,7 +15,9 @@ import streamlit_authenticator as stauth
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="Nexus Billing & Operations", page_icon="🧾", layout="wide")
-
+# --- INITIALIZE SESSION STATE ITEMS EARLY ---
+if "items" not in st.session_state or not isinstance(st.session_state.items, list) or len(st.session_state.items) == 0:
+    st.session_state.items = [{'desc': '', 'qty': 1.0, 'rate': 0.0, 'tax_rate': 18.0}]
 # --- USER CREDENTIALS & AUTHENTICATION SETUP ---
 credentials = {
     "usernames": {
@@ -518,8 +520,8 @@ elif authentication_status == True:
         
         if "items" not in st.session_state or not isinstance(st.session_state.items, list):
             st.session_state.items = [{'desc': '', 'qty': 1.0, 'rate': 0.0, 'tax_rate': 18.0}]
-
-        for i, item in enumerate(st.session_state.items):
+            
+for i, item in enumerate(st.session_state.items):
             i1, i2, i3, i4 = st.columns([4, 1, 1, 1])
             with i1: item['desc'] = st.text_input(f"Item {i+1} Description", item.get('desc', ''), key=f"desc_{i}")
             with i2: item['qty'] = st.number_input(f"Qty", min_value=0.1, value=float(item.get('qty', 1.0)), key=f"qty_{i}")
