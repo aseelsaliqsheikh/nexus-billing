@@ -39,6 +39,10 @@ authenticator = stauth.Authenticate(
 if "active_sessions" not in st.session_state:
     st.session_state["active_sessions"] = set()
 
+# --- INITIALIZE SESSION STATE ITEMS EARLY ---
+if "items" not in st.session_state or not isinstance(st.session_state.items, list) or len(st.session_state.items) == 0:
+    st.session_state.items = [{'desc': '', 'qty': 1.0, 'rate': 0.0, 'tax_rate': 18.0}]
+
 # --- LOGIN SCREEN ---
 try:
     authenticator.login()
@@ -481,7 +485,7 @@ elif authentication_status == True:
     if choice == "Create Document":
         st.header("📝 Create Billing Document")
         
-        if 'items' not in st.session_state or not isinstance(st.session_state.items, list):
+        if "items" not in st.session_state or not isinstance(st.session_state.items, list) or len(st.session_state.items) == 0:
             st.session_state.items = [{'desc': '', 'qty': 1.0, 'rate': 0.0, 'tax_rate': 18.0}]
 
         col_a, col_b, col_c, col_d = st.columns(4)
@@ -512,6 +516,9 @@ elif authentication_status == True:
 
         st.subheader("Line Items")
         
+        if not isinstance(st.session_state.items, list):
+            st.session_state.items = [{'desc': '', 'qty': 1.0, 'rate': 0.0, 'tax_rate': 18.0}]
+
         for i, item in enumerate(st.session_state.items):
             i1, i2, i3, i4 = st.columns([4, 1, 1, 1])
             with i1: item['desc'] = st.text_input(f"Item {i+1} Description", item.get('desc', ''), key=f"desc_{i}")
