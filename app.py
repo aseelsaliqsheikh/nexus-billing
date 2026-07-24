@@ -156,7 +156,9 @@ def draw_watermark(canvas, doc):
         canvas.saveState()
         canvas.setFont("Helvetica-Bold", 55)
         canvas.setFillColor(colors.HexColor("#0F172A"), alpha=0.08)
-        page_width, page_height = letter
+        
+        # Dynamically calculate the center of the current document page size
+        page_width, page_height = doc.pagesize
         
         watermark_text = get_setting('company_name', DEFAULT_SETTINGS['company_name']).upper()
         canvas.translate(page_width / 2.0, page_height / 2.0)
@@ -165,7 +167,6 @@ def draw_watermark(canvas, doc):
         canvas.restoreState()
     except Exception:
         pass
-
 # --- PROFESSIONAL PDF GENERATOR ENGINE ---
 def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, items, subtotal, tax_amt, grand_total, bank_details=None, is_duplicate=False, theme="Modern Minimalist (Clean Slate)", is_non_tax=False):
     buffer = io.BytesIO()
