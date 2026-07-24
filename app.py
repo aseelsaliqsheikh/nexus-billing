@@ -513,7 +513,7 @@ elif authentication_status == True:
         client_gstin = cc3.text_input("Client GSTIN (Leave blank if unreg.)", client_gstin)
         client_state = st.selectbox("Place of Supply (State)", ["Andaman and Nicobar Islands", "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chandigarh", "Chhattisgarh", "Dadra and Nagar Haveli and Daman and Diu", "Delhi", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jammu and Kashmir", "Jharkhand", "Karnataka", "Kerala", "Ladakh", "Lakshadweep", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Puducherry", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal"], index=15 if not client_state else ["Andaman and Nicobar Islands", "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chandigarh", "Chhattisgarh", "Dadra and Nagar Haveli and Daman and Diu", "Delhi", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jammu and Kashmir", "Jharkhand", "Karnataka", "Kerala", "Ladakh", "Lakshadweep", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Puducherry", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal"].index(client_state))
 
-   st.subheader("Line Items")
+        st.subheader("Line Items")
         
         if "items" not in st.session_state or not isinstance(st.session_state.items, list):
             st.session_state.items = [{'desc': '', 'qty': 1.0, 'rate': 0.0, 'tax_rate': 18.0}]
@@ -550,10 +550,6 @@ elif authentication_status == True:
             })
 
         st.session_state.items = temp_items
-
-        if st.button("➕ Add Another Item"):
-            st.session_state.items.append({'desc': '', 'qty': 1.0, 'rate': 0.0, 'tax_rate': 18.0 if not is_non_tax else 0.0})
-            st.rerun()
 
         if st.button("➕ Add Another Item"):
             st.session_state.items.append({'desc': '', 'qty': 1.0, 'rate': 0.0, 'tax_rate': 18.0 if not is_non_tax else 0.0})
