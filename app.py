@@ -39,8 +39,8 @@ if "active_sessions" not in st.session_state:
     st.session_state["active_sessions"] = set()
 
 # --- INITIALIZE SESSION STATE ITEMS EARLY ---
-if "items" not in st.session_state or not isinstance(st.session_state["items"], list) or len(st.session_state["items"]) == 0:
-    st.session_state["items"] = [{'desc': '', 'qty': 1.0, 'rate': 0.0, 'tax_rate': 18.0}]
+if "items" not in st.session_state or not isinstance(st.session_state.items, list) or len(st.session_state.items) == 0:
+    st.session_state.items = [{'desc': '', 'qty': 1.0, 'rate': 0.0, 'tax_rate': 18.0}]
 
 # --- LOGIN SCREEN ---
 try:
@@ -485,8 +485,8 @@ elif authentication_status == True:
         st.header("📝 Create Billing Document")
         
         # Safely enforce list type for session state items
-        if "items" not in st.session_state or not isinstance(st.session_state["items"], list) or len(st.session_state["items"]) == 0:
-            st.session_state["items"] = [{'desc': '', 'qty': 1.0, 'rate': 0.0, 'tax_rate': 18.0}]
+        if "items" not in st.session_state or not isinstance(st.session_state.items, list) or len(st.session_state.items) == 0:
+            st.session_state.items = [{'desc': '', 'qty': 1.0, 'rate': 0.0, 'tax_rate': 18.0}]
 
         col_a, col_b, col_c, col_d = st.columns(4)
         with col_a:
@@ -517,12 +517,12 @@ elif authentication_status == True:
         st.subheader("Line Items")
         
         # Robust check to prevent method collision or corruption
-        if "items" not in st.session_state or not isinstance(st.session_state["items"], list):
-            st.session_state["items"] = [{'desc': '', 'qty': 1.0, 'rate': 0.0, 'tax_rate': 18.0}]
+        if "items" not in st.session_state or not isinstance(st.session_state.items, list):
+            st.session_state.items = [{'desc': '', 'qty': 1.0, 'rate': 0.0, 'tax_rate': 18.0}]
 
         temp_items = []
         
-        for idx, item_data in enumerate(st.session_state["items"]):
+        for idx, item_data in enumerate(st.session_state.items):
             if not isinstance(item_data, dict):
                 item_data = {'desc': '', 'qty': 1.0, 'rate': 0.0, 'tax_rate': 18.0}
 
@@ -551,16 +551,16 @@ elif authentication_status == True:
                 'tax_rate': entered_tax
             })
 
-        st.session_state["items"] = temp_items
+        st.session_state.items = temp_items
 
         if st.button("➕ Add Another Item"):
-            if not isinstance(st.session_state["items"], list):
-                st.session_state["items"] = []
-            st.session_state["items"].append({'desc': '', 'qty': 1.0, 'rate': 0.0, 'tax_rate': 18.0 if not is_non_tax else 0.0})
+            if not isinstance(st.session_state.items, list):
+                st.session_state.items = []
+            st.session_state.items.append({'desc': '', 'qty': 1.0, 'rate': 0.0, 'tax_rate': 18.0 if not is_non_tax else 0.0})
             st.rerun()
 
-        subtotal = sum(i['qty'] * i['rate'] for i in st.session_state["items"])
-        if not is_non_tax: tax_amt = sum((i['qty'] * i['rate']) * (i['tax_rate']/100) for i in st.session_state["items"])
+        subtotal = sum(i['qty'] * i['rate'] for i in st.session_state.items)
+        if not is_non_tax: tax_amt = sum((i['qty'] * i['rate']) * (i['tax_rate']/100) for i in st.session_state.items)
         else: tax_amt = 0.0
         grand_total = subtotal + tax_amt
 
@@ -572,23 +572,23 @@ elif authentication_status == True:
             st.metric("Grand Total", f"Rs. {grand_total:,.2f}")
 
         if st.button("Preview HTML & Layout"):
-            st.markdown(render_html_preview(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, st.session_state["items"], subtotal, tax_amt, grand_total, is_duplicate=False, theme=get_theme_from_db(), is_non_tax=is_non_tax), unsafe_allow_html=True)
+            st.markdown(render_html_preview(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, st.session_state.items, subtotal, tax_amt, grand_total, is_duplicate=False, theme=get_theme_from_db(), is_non_tax=is_non_tax), unsafe_allow_html=True)
 
         if st.button("💾 Save & Generate Final PDF"):
-            if client_name and len(st.session_state["items"]) > 0 and st.session_state["items"][0]['desc']:
+            if client_name and len(st.session_state.items) > 0 and st.session_state.items[0]['desc']:
                 if sel_client == "-- New Client --":
                     cursor.execute("INSERT INTO clients (name, phone, email, address, state, tax_id) VALUES (?, ?, ?, ?, ?, ?)", (client_name, client_phone, client_email, client_addr, client_state, client_gstin))
                 else:
                     cursor.execute("UPDATE clients SET phone=?, email=?, address=?, state=?, tax_id=? WHERE name=?", (client_phone, client_email, client_addr, client_state, client_gstin, client_name))
                 
-                items_j = json.dumps(st.session_state["items"])
+                items_j = json.dumps(st.session_state.items)
                 cursor.execute('''INSERT INTO documents (doc_type, doc_num, client_name, client_phone, client_gstin, client_state, doc_date, subtotal, tax_amt, grand_total, status, items_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (doc_type, doc_num, client_name, client_phone, client_gstin, client_state, str(doc_date), subtotal, tax_amt, grand_total, status, items_j))
                 conn.commit()
                 st.success("Document Saved to Database!")
 
-                pdf_buf = generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, str(doc_date), st.session_state["items"], subtotal, tax_amt, grand_total, theme=get_theme_from_db(), is_non_tax=is_non_tax)
+                pdf_buf = generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, client_state, str(doc_date), st.session_state.items, subtotal, tax_amt, grand_total, theme=get_theme_from_db(), is_non_tax=is_non_tax)
                 st.download_button(label="📥 Download Original PDF", data=pdf_buf, file_name=f"{doc_num}.pdf", mime="application/pdf")
-                st.session_state["items"] = [{'desc': '', 'qty': 1.0, 'rate': 0.0, 'tax_rate': 18.0 if not is_non_tax else 0.0}]
+                st.session_state.items = [{'desc': '', 'qty': 1.0, 'rate': 0.0, 'tax_rate': 18.0 if not is_non_tax else 0.0}]
             else:
                 st.error("Please enter Client Name and at least one item description.")
 
