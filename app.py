@@ -180,7 +180,6 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
     buffer = io.BytesIO()
     pagesize_tuple, _, _ = PAGE_SIZE_MAP.get(page_size_name, PAGE_SIZE_MAP["A4"])
     
-    # 30pt margins give ample width (535pt printable width for A4) preventing right-side label cutoffs
     doc = SimpleDocTemplate(buffer, pagesize=pagesize_tuple, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
     story = []
     styles = getSampleStyleSheet()
@@ -275,7 +274,6 @@ def generate_pdf(doc_type, doc_num, client_name, client_phone, client_gstin, cli
 
     left_header_content = [logo_container, Spacer(1, 4), company_info_p] if logo_container else company_info_p
 
-    # Total width = 535pt to match standard 30pt margins on A4 (595.27 pt width)
     header_table = Table([[left_header_content, meta_info_p]], colWidths=[310, 225])
     header_table.setStyle(TableStyle([
         ('VALIGN', (0,0), (-1,-1), 'TOP'),
@@ -740,7 +738,6 @@ if selected_theme != current_theme:
     save_theme_to_db(selected_theme)
     st.sidebar.success("Theme updated successfully!")
 
-# A4 set as the primary default page size
 selected_page_size = st.sidebar.selectbox(
     "📄 Print Page Size",
     ["A4", "Letter", "Legal"],
