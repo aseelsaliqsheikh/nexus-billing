@@ -516,7 +516,7 @@ elif authentication_status == True:
 
         st.subheader("Line Items")
         
-        if not isinstance(st.session_state.items, list):
+        if "items" not in st.session_state or not isinstance(st.session_state.items, list):
             st.session_state.items = [{'desc': '', 'qty': 1.0, 'rate': 0.0, 'tax_rate': 18.0}]
 
         for i, item in enumerate(st.session_state.items):
